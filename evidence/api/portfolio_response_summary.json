@@ -1,0 +1,10 @@
+{
+  "source": "lakebase",
+  "table": "serving.study_portfolio",
+  "row_count": 3,
+  "study_ids": [
+    "CARD-202",
+    "ONC-101",
+    "RESP-303"
+  ]
+}

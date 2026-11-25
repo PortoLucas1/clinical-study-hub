@@ -1,0 +1,18 @@
+command: ['npm', 'run', 'start']
+env:
+  - name: DATABRICKS_WAREHOUSE_ID
+    valueFrom: sql-warehouse
+  - name: DATABRICKS_VOLUME_FILES
+    valueFrom: files
+  - name: DATABRICKS_JOB_ID
+    valueFrom: job
+  - name: LAKEBASE_ENDPOINT
+    valueFrom: postgres
+  - name: DATABRICKS_GENIE_SPACE_ID
+    valueFrom: genie-space
+  - name: STUDY_CATALOG
+    value: clinical_demo
+  - name: STUDY_SCHEMA
+    value: study_onboarding
+  - name: PORTFOLIO_TABLE
+    value: serving.study_portfolio

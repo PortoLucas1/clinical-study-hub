@@ -1,0 +1,6 @@
+resources:
+  schemas:
+    study_onboarding:
+      catalog_name: ${var.catalog}
+      name: ${var.schema}
+      comment: Clinical study onboarding demo - raw, bronze, silver (SDTM-like) and gold clinical study data

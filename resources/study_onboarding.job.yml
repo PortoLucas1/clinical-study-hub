@@ -1,0 +1,45 @@
+resources:
+  jobs:
+    study_onboarding_job:
+      name: study-onboarding
+      description: >-
+        Onboards an approved clinical study package: unzip and stage files, run
+        Lakeflow Declarative Pipelines (Bronze → Silver → Gold), generate AI study insights, then publish the
+        portfolio table that Lakebase serves to the app.
+      max_concurrent_runs: 1
+      queue:
+        enabled: true
+      parameters:
+        - name: submission_id
+          default: ""
+        - name: study_id
+          default: ""
+        - name: zip_path
+          default: ""
+        - name: catalog
+          default: ${var.catalog}
+        - name: schema
+          default: ${var.schema}
+        - name: llm_endpoint
+          default: ${var.llm_endpoint}
+        - name: synced_table
+          default: ${var.portfolio_synced_table}
+      tasks:
+        - task_key: unzip_and_stage
+          notebook_task:
+            notebook_path: ../src/notebooks/01_unzip_and_stage.py
+        - task_key: declarative_pipeline
+          depends_on:
+            - task_key: unzip_and_stage
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.study_pipeline.id}
+        - task_key: study_insights
+          depends_on:
+            - task_key: declarative_pipeline
+          notebook_task:
+            notebook_path: ../src/notebooks/03_study_insights.py
+        - task_key: publish_portfolio
+          depends_on:
+            - task_key: study_insights
+          notebook_task:
+            notebook_path: ../src/notebooks/04_publish_portfolio.py

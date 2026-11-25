@@ -1,0 +1,39 @@
+bundle:
+  name: clinical_study_onboarding
+
+include:
+  - resources/*.yml
+
+sync:
+  exclude:
+    - data/**
+    - app/**
+    - scripts/**
+    - demo_assets/**
+    - docs/**
+    - "*.zip"
+    - .env
+
+variables:
+  catalog:
+    description: Unity Catalog catalog for the demo
+    default: clinical_demo
+  schema:
+    description: Schema that holds volumes, bronze/silver/gold tables
+    default: study_onboarding
+  warehouse_id:
+    description: SQL warehouse ID used by ai_query, Genie and the app (set via 00_install.py or --var)
+    default: ""
+  llm_endpoint:
+    description: Foundation model endpoint used to write study insight narratives
+    default: databricks-claude-sonnet-4-5
+  portfolio_synced_table:
+    description: Lakebase synced table (lakebase_catalog.schema.table) that serves the portfolio page
+    default: study_hub_lakebase.serving.study_portfolio
+
+targets:
+  # Default: deploy into the *current* workspace (Git Folder / 00_install.py / Genie Code).
+  dev:
+    default: true
+    workspace:
+      root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}

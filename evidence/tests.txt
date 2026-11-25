@@ -1,0 +1,13 @@
+# npm run typecheck (app/study-hub)
+$ tsc -b tsconfig.server.json && tsc -b tsconfig.client.json
+result: no errors (exit 0)
+
+# npm test -> vitest run (app/study-hub)
+ RUN  v4.1.9 /Users/<user>/Downloads/cursor_projects/clinical-study-hub/app/study-hub
+
+
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+   Start at  14:21:13
+   Duration  189ms (transform 24ms, setup 0ms, import 36ms, tests 2ms, environment 0ms)
+

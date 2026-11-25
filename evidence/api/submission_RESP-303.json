@@ -1,0 +1,78 @@
+{
+  "submission_id": "SUB-20261125171513-IYLA",
+  "study_id": "RESP-303",
+  "study_title": "A Phase II Study of Inhaled RSP-12 in Adults with Moderate-to-Severe Asthma",
+  "phase": "Phase 2",
+  "indication": "Moderate-to-Severe Asthma",
+  "therapeutic_area": "Respiratory",
+  "sponsor": "Synthetic Airway Sciences",
+  "file_name": "RESP-303_study_package.zip",
+  "file_size": "162579",
+  "zip_path": "/Volumes/<catalog>/study_onboarding/landing/SUB-20261125171513-IYLA__RESP-303_study_package.zip",
+  "upload_path": "SUB-20261125171513-IYLA__RESP-303_study_package.zip",
+  "notes": "Automated end-to-end validation",
+  "status": "PUBLISHED",
+  "submitted_by": "<redacted-user>",
+  "submitted_at": "2026-11-25T17:15:13.807Z",
+  "reviewed_by": "<redacted-user>",
+  "reviewed_at": "2026-11-25T17:15:18.087Z",
+  "review_comment": "Package complete, approved for processing",
+  "run_id": "447908370512864",
+  "run_state": "SUCCESS",
+  "run_tasks": [
+    {
+      "state": "TERMINATED",
+      "result": "SUCCESS",
+      "task_key": "publish_portfolio"
+    },
+    {
+      "state": "TERMINATED",
+      "result": "SUCCESS",
+      "task_key": "declarative_pipeline"
+    },
+    {
+      "state": "TERMINATED",
+      "result": "SUCCESS",
+      "task_key": "study_insights"
+    },
+    {
+      "state": "TERMINATED",
+      "result": "SUCCESS",
+      "task_key": "unzip_and_stage"
+    }
+  ],
+  "completed_at": "2026-11-25T17:20:34.944Z",
+  "updated_at": "2026-11-25T17:20:34.944Z",
+  "events": [
+    {
+      "event": "CREATED",
+      "actor": "<redacted-user>",
+      "detail": "RESP-303_study_package.zip (8 files)",
+      "created_at": "2026-11-25T17:15:13.823Z"
+    },
+    {
+      "event": "SUBMITTED_FOR_APPROVAL",
+      "actor": "<redacted-user>",
+      "detail": null,
+      "created_at": "2026-11-25T17:15:17.002Z"
+    },
+    {
+      "event": "APPROVED",
+      "actor": "<redacted-user>",
+      "detail": "Package complete, approved for processing",
+      "created_at": "2026-11-25T17:15:18.091Z"
+    },
+    {
+      "event": "JOB_TRIGGERED",
+      "actor": "study-hub",
+      "detail": "Run 447908370512864",
+      "created_at": "2026-11-25T17:15:18.095Z"
+    },
+    {
+      "event": "PUBLISHED",
+      "actor": "lakeflow-job",
+      "detail": "Run 447908370512864 finished: SUCCESS",
+      "created_at": "2026-11-25T17:20:34.948Z"
+    }
+  ]
+}

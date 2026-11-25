@@ -1,0 +1,5 @@
+.databricks
+.git
+.env
+node_modules
+evidence/notebooks

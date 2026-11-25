@@ -1,0 +1,4 @@
+study_id,nct_id,title,phase,indication,therapeutic_area,sponsor,planned_enrollment,latest_submission_id,files_staged,rows_staged,staged_at
+CARD-202,NCT0SYN0202,"A Phase III, Double-Blind, Placebo-Controlled Study of CRD-7 in Patients with Heart Failure with Reduced Ejection Fraction",Phase 3,Heart Failure with Reduced Ejection Fraction,Cardiovascular,Synthetic Cardio Therapeutics,300,SEED-CARD-202,7,19830,2026-11-25T16:52:38.975Z
+ONC-101,NCT0SYN0101,"A Phase II, Randomized, Open-Label Study of SMX-401 Versus Docetaxel in Previously Treated Advanced Non-Small Cell Lung Cancer",Phase 2,Non-Small Cell Lung Cancer,Oncology,Synthetic Biopharma Inc.,150,SEED-ONC-101,7,10474,2026-11-25T16:48:54.485Z
+RESP-303,NCT0SYN0303,A Phase II Study of Inhaled RSP-12 in Adults with Moderate-to-Severe Asthma,Phase 2,Moderate-to-Severe Asthma,Respiratory,Synthetic Airway Sciences,120,SUB-20261125171513-IYLA,7,7153,2026-11-25T17:15:33.652Z

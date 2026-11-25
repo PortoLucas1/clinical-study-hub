@@ -1,0 +1,110 @@
+@import "@databricks/appkit-ui/styles.css";
+
+/* Neutral demo brand tokens: teal primary, deep navy, mint accent, charcoal text. */
+:root {
+  --brand-primary: #0e7c86;
+  --brand-primary-deep: #0a5560;
+  --brand-navy: #12344d;
+  --brand-mint: #b6ecdf;
+  --brand-charcoal: #1f2933;
+  --brand-gray: #6b7280;
+
+  --radius: 0.625rem;
+  --background: #f7f9fb;
+  --foreground: var(--brand-charcoal);
+  --card: #ffffff;
+  --card-foreground: var(--brand-charcoal);
+  --popover: #ffffff;
+  --popover-foreground: var(--brand-charcoal);
+  --primary: var(--brand-primary);
+  --primary-foreground: #ffffff;
+  --secondary: #e9f4fc;
+  --secondary-foreground: var(--brand-navy);
+  --muted: #f1f3f6;
+  --muted-foreground: var(--brand-gray);
+  --accent: #e3f6f2;
+  --accent-foreground: #1d5e52;
+  --destructive: #d64545;
+  --destructive-foreground: #ffffff;
+  --success: #2a9d7f;
+  --success-foreground: #ffffff;
+  --warning: #e8a33d;
+  --warning-foreground: #5a3a05;
+  --border: #d4d8df;
+  --input: #d4d8df;
+  --ring: var(--brand-primary);
+  --chart-1: var(--brand-primary);
+  --chart-2: var(--brand-navy);
+  --chart-3: #4fc2ab;
+  --chart-4: #e8a33d;
+  --chart-5: #8c96a6;
+  --sidebar: #ffffff;
+  --sidebar-primary: var(--brand-primary);
+  --brand-gradient: linear-gradient(90deg, var(--brand-navy) 0%, var(--brand-primary) 100%);
+  --font-sans: "Open Sans", ui-sans-serif, system-ui, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0f1b2d;
+    --foreground: #eef3f8;
+    --card: #15243a;
+    --card-foreground: #eef3f8;
+    --popover: #15243a;
+    --popover-foreground: #eef3f8;
+    --primary: #4fb3ec;
+    --primary-foreground: #0b1626;
+    --secondary: #1c3150;
+    --secondary-foreground: #e9f4fc;
+    --muted: #1a2b44;
+    --muted-foreground: #a7b4c5;
+    --accent: #173d3a;
+    --accent-foreground: #bff0e5;
+    --border: rgb(255 255 255 / 12%);
+    --input: rgb(255 255 255 / 15%);
+    --ring: #4fb3ec;
+    --chart-1: #4fb3ec;
+    --chart-2: #8fb3e8;
+    --chart-3: var(--brand-mint);
+  }
+}
+
+html,
+body {
+  font-family: var(--font-sans);
+}
+
+.brand-bar {
+  background-image: var(--brand-gradient);
+}
+
+.brand-announce {
+  background-color: var(--brand-navy);
+  color: #ffffff;
+}
+
+.brand-pill {
+  background-color: var(--brand-mint);
+  color: var(--brand-charcoal);
+}
+
+.brand-hero {
+  background-color: var(--brand-primary);
+  color: #ffffff;
+  border-radius: 3.5rem 0.75rem 3.5rem 0.75rem;
+}
+
+.brand-footer {
+  background-color: var(--brand-charcoal);
+  color: rgb(255 255 255 / 75%);
+}
+
+.brand-heading {
+  font-weight: 300;
+  letter-spacing: -0.01em;
+}
+
+.brand-heading .initial {
+  color: var(--brand-primary);
+  font-weight: 600;
+}

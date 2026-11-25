@@ -1,0 +1,10 @@
+study_id,severity,issue_types,issue_count
+CARD-202,High,3,46
+CARD-202,Low,1,51
+CARD-202,Medium,2,30
+ONC-101,High,3,21
+ONC-101,Low,1,46
+ONC-101,Medium,2,7
+RESP-303,High,3,13
+RESP-303,Low,1,25
+RESP-303,Medium,2,19

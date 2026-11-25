@@ -1,0 +1,17 @@
+resources:
+  pipelines:
+    study_pipeline:
+      name: study-declarative-pipelines
+      catalog: ${var.catalog}
+      schema: ${resources.schemas.study_onboarding.name}
+      serverless: true
+      photon: true
+      channel: current
+      continuous: false
+      development: false
+      root_path: ../src/pipeline
+      libraries:
+        - glob:
+            include: ../src/pipeline/transformations/**
+      configuration:
+        raw_path: /Volumes/${var.catalog}/${var.schema}/raw
