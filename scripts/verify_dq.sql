@@ -48,4 +48,17 @@ UNION ALL
 SELECT 'gold_study_overview.enrolled counts clean subjects only',
        count_if(enrolled > subjects_clean)
 FROM clinical_demo.study_onboarding.gold_study_overview
+UNION ALL
+SELECT 'accepted (waived) issues of the current submission are not quarantined',
+       count(*)
+FROM clinical_demo.study_onboarding.dq_waivers w
+JOIN clinical_demo.study_onboarding.study_registry r
+  ON r.study_id = w.study_id AND r.latest_submission_id = w.submission_id
+JOIN clinical_demo.study_onboarding.gold_dq_issues i
+  ON i.study_id = w.study_id AND upper(i.domain) = upper(w.domain) AND i.rule_id = w.rule_id
+ AND i.usubjid = w.usubjid AND i.action = 'quarantine'
+UNION ALL
+SELECT 'every threshold status row has a known status',
+       count_if(status NOT IN ('ok', 'warn', 'critical'))
+FROM clinical_demo.study_onboarding.dq_threshold_status
 ORDER BY check_name;

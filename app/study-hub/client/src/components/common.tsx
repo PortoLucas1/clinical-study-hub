@@ -12,7 +12,7 @@ import {
   EmptyTitle,
   Skeleton,
 } from '@databricks/appkit-ui/react';
-import { AlertTriangle, CheckCircle2, CircleDashed, Clock, Inbox, Loader2, XCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, CircleDashed, Clock, Hand, Inbox, Loader2, XCircle } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { RunTask, SubmissionStatus } from '../lib/submissions';
 
@@ -22,8 +22,33 @@ const STATUS_STYLE: Record<SubmissionStatus, { label: string; className: string;
   REJECTED: { label: 'Rejected', className: 'bg-destructive/15 text-destructive', icon: <XCircle className="h-3 w-3" /> },
   PROCESSING: { label: 'Processing', className: 'bg-accent text-accent-foreground', icon: <Loader2 className="h-3 w-3 animate-spin" /> },
   PUBLISHED: { label: 'Published', className: 'bg-success/15 text-success', icon: <CheckCircle2 className="h-3 w-3" /> },
+  AWAITING_MANUAL_MODELLING: {
+    label: 'Manual modelling needed',
+    className: 'bg-warning/20 text-warning-foreground',
+    icon: <Hand className="h-3 w-3" />,
+  },
   FAILED: { label: 'Failed', className: 'bg-destructive/15 text-destructive', icon: <AlertTriangle className="h-3 w-3" /> },
 };
+
+export type ThresholdStatus = 'ok' | 'warn' | 'critical';
+
+const THRESHOLD_STYLE: Record<ThresholdStatus, { label: string; className: string }> = {
+  ok: { label: 'DQ within thresholds', className: 'bg-success/15 text-success' },
+  warn: { label: 'DQ warning', className: 'bg-warning/20 text-warning-foreground' },
+  critical: { label: 'DQ critical', className: 'bg-destructive/15 text-destructive' },
+};
+
+/** Data quality threshold status (dq_study_status): ok, warn or critical. */
+export function ThresholdBadge({ status, title }: { status: unknown; title?: string }) {
+  const key = (['ok', 'warn', 'critical'].includes(String(status)) ? String(status) : 'ok') as ThresholdStatus;
+  const s = THRESHOLD_STYLE[key];
+  return (
+    <Badge variant="outline" title={title} className={`gap-1 border-transparent ${s.className}`}>
+      {key === 'ok' ? <CheckCircle2 className="h-3 w-3" /> : <AlertTriangle className="h-3 w-3" />}
+      {s.label}
+    </Badge>
+  );
+}
 
 export function StatusBadge({ status }: { status: SubmissionStatus }) {
   const s = STATUS_STYLE[status] ?? STATUS_STYLE.UPLOADING;
@@ -96,9 +121,11 @@ export function EmptyBlock({ title, description, icon }: { title: string; descri
   );
 }
 
-const STEPS: { key: string; label: string }[] = [
+const STEPS: { key: string; alt?: string; label: string }[] = [
   { key: 'unzip_and_stage', label: 'Unzip & stage' },
+  { key: 'ai_data_modelling', alt: 'apply_manual_modelling', label: 'AI data modelling' },
   { key: 'declarative_pipeline', label: 'Bronze \u2192 Silver \u2192 Gold' },
+  { key: 'dq_threshold_check', label: 'Quality thresholds' },
   { key: 'study_insights', label: 'AI insights' },
   { key: 'publish_portfolio', label: 'Publish to Lakebase' },
 ];
@@ -108,11 +135,14 @@ export function PipelineProgress({ tasks, status }: { tasks: RunTask[] | null; s
   return (
     <ol className="flex flex-wrap items-center gap-2 text-xs">
       {STEPS.map((step, i) => {
-        const t = byKey.get(step.key);
-        const done = t?.result === 'SUCCESS' || status === 'PUBLISHED';
-        const failed = t?.result && t.result !== 'SUCCESS';
+        const t = byKey.get(step.key) ?? (step.alt ? byKey.get(step.alt) : undefined);
+        const awaiting = status === 'AWAITING_MANUAL_MODELLING' && step.key === 'ai_data_modelling';
+        const done = !awaiting && (t?.result === 'SUCCESS' || status === 'PUBLISHED');
+        const failed = t?.result && t.result !== 'SUCCESS' && t.result !== 'EXCLUDED';
         const running = !done && !failed && (t?.state === 'RUNNING' || t?.state === 'PENDING' || t?.state === 'QUEUED');
-        const icon = done ? (
+        const icon = awaiting ? (
+          <Hand className="h-3.5 w-3.5 text-warning" />
+        ) : done ? (
           <CheckCircle2 className="h-3.5 w-3.5 text-success" />
         ) : failed ? (
           <XCircle className="h-3.5 w-3.5 text-destructive" />
@@ -124,7 +154,9 @@ export function PipelineProgress({ tasks, status }: { tasks: RunTask[] | null; s
         return (
           <li key={step.key} className="flex items-center gap-1.5">
             {icon}
-            <span className={done ? 'text-foreground' : 'text-muted-foreground'}>{step.label}</span>
+            <span className={done || awaiting ? 'text-foreground' : 'text-muted-foreground'}>
+              {awaiting ? 'AI data modelling: manual review needed' : step.label}
+            </span>
             {i < STEPS.length - 1 && <span className="mx-1 text-muted-foreground">/</span>}
           </li>
         );

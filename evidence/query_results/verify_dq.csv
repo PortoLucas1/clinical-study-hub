@@ -1,6 +1,8 @@
 check_name,failures
+accepted (waived) issues of the current submission are not quarantined,0
 clean subjects have no quarantined records,0
 every staged row lands in clean or quarantine (dq_reconciliation),0
+every threshold status row has a known status,0
 gold_study_overview.enrolled counts clean subjects only,0
 no quarantined or unknown subject in clean Silver or Gold tables,0
 quarantined subjects have quarantined records,0

@@ -12,6 +12,8 @@ variables:
     default: clinical_demo.study_onboarding.landing
   job_id:
     description: Study onboarding Lakeflow Job ID from the root bundle
+  manual_job_id:
+    description: Manual data modelling (human-in-the-loop fallback) Lakeflow Job ID from the root bundle
   postgres_branch:
     description: Lakebase Postgres branch resource name
     default: projects/study-hub/branches/production
@@ -47,6 +49,10 @@ resources:
         - name: job
           job:
             id: ${var.job_id}
+            permission: CAN_MANAGE_RUN
+        - name: manual-job
+          job:
+            id: ${var.manual_job_id}
             permission: CAN_MANAGE_RUN
         - name: postgres
           postgres:

@@ -12,7 +12,14 @@ interface StudyHubAppKit {
   jobs: (key: string) => JobAPI;
 }
 
-type SubmissionStatus = 'UPLOADING' | 'PENDING_APPROVAL' | 'REJECTED' | 'PROCESSING' | 'PUBLISHED' | 'FAILED';
+type SubmissionStatus =
+  | 'UPLOADING'
+  | 'PENDING_APPROVAL'
+  | 'REJECTED'
+  | 'PROCESSING'
+  | 'PUBLISHED'
+  | 'AWAITING_MANUAL_MODELLING'
+  | 'FAILED';
 
 const SCHEMA_SQL = [
   `CREATE SCHEMA IF NOT EXISTS study_hub`,
@@ -114,7 +121,24 @@ const CreateSubmissionBody = z.object({
   manifest: z.array(ManifestEntry).max(500),
 });
 
-const ReviewBody = z.object({ comment: z.string().max(2000).optional() });
+// `ai_demo_scenario` drives the mock AI data modelling step (src/notebooks/02_ai_data_modelling.py).
+export const AI_SCENARIOS = ['pass', 'recover', 'fail'] as const;
+const ReviewBody = z.object({
+  comment: z.string().max(2000).optional(),
+  ai_demo_scenario: z.enum(AI_SCENARIOS).optional(),
+});
+
+/** The onboarding run succeeded but stopped at the manual fallback: nothing was published yet. */
+export function statusFromRun(
+  lifecycle: string | undefined,
+  resultState: string | undefined,
+  tasks: { task_key: string; result?: string }[],
+): SubmissionStatus {
+  if (lifecycle !== 'TERMINATED' && lifecycle !== 'INTERNAL_ERROR' && lifecycle !== 'SKIPPED') return 'PROCESSING';
+  if (resultState !== 'SUCCESS') return 'FAILED';
+  const handoff = tasks.find((t) => t.task_key === 'manual_modelling_handoff');
+  return handoff?.result === 'SUCCESS' ? 'AWAITING_MANUAL_MODELLING' : 'PUBLISHED';
+}
 
 function actorOf(req: Request): string {
   return req.header('x-forwarded-email') ?? req.header('x-forwarded-user') ?? 'local-developer';
@@ -138,6 +162,8 @@ export async function setupStudyHubRoutes(appkit: StudyHubAppKit) {
   const catalog = process.env.STUDY_CATALOG ?? 'clinical_demo';
   const schema = process.env.STUDY_SCHEMA ?? 'study_onboarding';
   const job = appkit.jobs('default');
+  // Human-in-the-loop fallback job (DATABRICKS_JOB_MANUAL_MODELLING); optional so older deployments keep working.
+  const manualJob = process.env.DATABRICKS_JOB_MANUAL_MODELLING ? appkit.jobs('manual_modelling') : null;
   const portfolioTable = process.env.PORTFOLIO_TABLE ?? 'serving.study_portfolio';
   if (!/^[a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*$/.test(portfolioTable)) throw new Error(`Invalid PORTFOLIO_TABLE: ${portfolioTable}`);
 
@@ -176,14 +202,11 @@ export async function setupStudyHubRoutes(appkit: StudyHubAppKit) {
       state: t.state?.life_cycle_state,
       result: t.state?.result_state,
     }));
-    let status: SubmissionStatus = 'PROCESSING';
-    if (lifecycle === 'TERMINATED' || lifecycle === 'INTERNAL_ERROR' || lifecycle === 'SKIPPED') {
-      status = resultState === 'SUCCESS' ? 'PUBLISHED' : 'FAILED';
-    }
+    const status = statusFromRun(lifecycle, resultState, tasks);
     await appkit.lakebase.query(
       `UPDATE study_hub.submissions
          SET status = $2, run_state = $3, run_tasks = $4::jsonb, run_url = COALESCE($5, run_url),
-             completed_at = CASE WHEN $2 IN ('PUBLISHED', 'FAILED') THEN NOW() ELSE completed_at END,
+             completed_at = CASE WHEN $2 IN ('PUBLISHED', 'FAILED', 'AWAITING_MANUAL_MODELLING') THEN NOW() ELSE completed_at END,
              updated_at = NOW()
        WHERE submission_id = $1`,
       [row.submission_id, status, resultState ?? lifecycle ?? null, JSON.stringify(tasks), run.run_page_url ?? null],
@@ -365,7 +388,13 @@ export async function setupStudyHubRoutes(appkit: StudyHubAppKit) {
         res.status(403).json({ error: 'Only an Admin can approve study packages' });
         return;
       }
-      const comment = ReviewBody.safeParse(req.body ?? {}).data?.comment ?? null;
+      const body = ReviewBody.safeParse(req.body ?? {});
+      if (!body.success) {
+        res.status(400).json({ error: body.error.issues.map((i) => i.message).join('; ') });
+        return;
+      }
+      const comment = body.data.comment ?? null;
+      const scenario = body.data.ai_demo_scenario ?? 'pass';
       try {
         const row = await getSubmission(req.params.id);
         if (!row) {
@@ -384,6 +413,7 @@ export async function setupStudyHubRoutes(appkit: StudyHubAppKit) {
             zip_path: String(row.zip_path),
             catalog,
             schema,
+            ai_demo_scenario: scenario,
           },
         });
         if (!run.ok || !run.data.run_id) {
@@ -398,11 +428,63 @@ export async function setupStudyHubRoutes(appkit: StudyHubAppKit) {
           [row.submission_id, actor, comment, run.data.run_id],
         );
         await logEvent(String(row.submission_id), 'APPROVED', actor, comment ?? undefined);
-        await logEvent(String(row.submission_id), 'JOB_TRIGGERED', 'study-hub', `Run ${run.data.run_id}`);
+        await logEvent(
+          String(row.submission_id),
+          'JOB_TRIGGERED',
+          'study-hub',
+          `Run ${run.data.run_id}${scenario === 'pass' ? '' : ` (AI modelling simulation: ${scenario})`}`,
+        );
         res.json(await getSubmission(req.params.id));
       } catch (err) {
         console.error('[study-hub] approve failed', err);
         res.status(500).json({ error: 'Failed to approve submission' });
+      }
+    });
+
+    app.post('/api/submissions/:id/manual-modelling', async (req, res) => {
+      if (!isAdmin(req)) {
+        res.status(403).json({ error: 'Only an Admin can start manual data modelling' });
+        return;
+      }
+      if (!manualJob) {
+        res.status(501).json({ error: 'The manual data modelling job is not configured for this app' });
+        return;
+      }
+      try {
+        const row = await getSubmission(req.params.id);
+        if (!row) {
+          res.status(404).json({ error: 'Submission not found' });
+          return;
+        }
+        if (row.status !== 'AWAITING_MANUAL_MODELLING') {
+          res.status(409).json({ error: `Manual modelling is only available while awaiting it, not in status ${String(row.status)}` });
+          return;
+        }
+        const actor = actorOf(req);
+        const run = await manualJob.runNow({
+          job_parameters: {
+            submission_id: String(row.submission_id),
+            study_id: String(row.study_id),
+            reviewer: actor,
+            catalog,
+            schema,
+          },
+        });
+        if (!run.ok || !run.data.run_id) {
+          res.status(502).json({ error: `Failed to start manual modelling job${run.ok ? '' : `: ${run.message}`}` });
+          return;
+        }
+        await appkit.lakebase.query(
+          `UPDATE study_hub.submissions
+             SET status = 'PROCESSING', run_id = $2, run_state = 'PENDING', run_tasks = NULL, completed_at = NULL, updated_at = NOW()
+           WHERE submission_id = $1`,
+          [row.submission_id, run.data.run_id],
+        );
+        await logEvent(String(row.submission_id), 'MANUAL_MODELLING_STARTED', actor, `Run ${run.data.run_id}`);
+        res.json(await getSubmission(req.params.id));
+      } catch (err) {
+        console.error('[study-hub] manual modelling failed', err);
+        res.status(500).json({ error: 'Failed to start manual modelling' });
       }
     });
 

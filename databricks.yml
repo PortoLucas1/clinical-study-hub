@@ -30,6 +30,26 @@ variables:
   portfolio_synced_table:
     description: Lakebase synced table (lakebase_catalog.schema.table) that serves the portfolio page
     default: study_hub_lakebase.serving.study_portfolio
+  lakebase_catalog:
+    description: Unity Catalog catalog that exposes the Lakebase database (read-only), used to read data quality review decisions
+    default: study_hub_lakebase
+  alert_email:
+    description: >-
+      Recipient of job failure, duration and data quality alerts. Defaults to the deploying user, so no address is
+      committed to the repo. Override with --var="alert_email=<address>".
+    default: ${workspace.current_user.userName}
+  ai_accuracy_threshold:
+    description: Minimum AI data modelling accuracy (percent of mapped values correct) to continue without a human
+    default: "99.9"
+  ai_max_retries:
+    description: How many times the AI data modelling step retries (with validation feedback) before the manual fallback
+    default: "3"
+  job_duration_warning_seconds:
+    description: Send a warning when an onboarding run takes longer than this (typical run is about 5 minutes)
+    default: "600"
+  job_timeout_seconds:
+    description: Hard timeout for onboarding and remediation runs
+    default: "1800"
 
 targets:
   # Default: deploy into the *current* workspace (Git Folder / 00_install.py / Genie Code).

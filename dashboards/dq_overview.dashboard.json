@@ -1,0 +1,836 @@
+{
+  "datasets": [
+    {
+      "name": "ds_kpi",
+      "displayName": "Data quality KPIs",
+      "queryLines": [
+        "SELECT count_if(s.status = 'critical') AS critical_studies, count_if(s.status = 'warn') AS warn_studies, ",
+        "sum(c.subjects_quarantined) AS subjects_quarantined, ",
+        "round(100.0 * sum(c.subjects_quarantined) / nullif(sum(c.subjects_received), 0), 1) AS pct_quarantined ",
+        "FROM dq_study_coverage c LEFT JOIN dq_study_status s ON s.study_id = c.study_id "
+      ]
+    },
+    {
+      "name": "ds_status",
+      "displayName": "Quarantine by study",
+      "queryLines": [
+        "SELECT c.study_id, c.subjects_received, c.subjects_clean, c.subjects_quarantined, ",
+        "round(100.0 * c.subjects_quarantined / nullif(c.subjects_received, 0), 1) AS pct_quarantined, ",
+        "c.records_received, c.records_quarantined, coalesce(s.status, 'ok') AS status, s.breaches ",
+        "FROM dq_study_coverage c LEFT JOIN dq_study_status s ON s.study_id = c.study_id ORDER BY c.study_id "
+      ]
+    },
+    {
+      "name": "ds_reasons",
+      "displayName": "Quarantine reasons",
+      "queryLines": [
+        "SELECT study_id, concat(domain, '.', rule_id) AS rule, rule_description, severity, subjects_affected, issue_count ",
+        "FROM gold_dq_summary WHERE action = 'quarantine' ORDER BY study_id, subjects_affected DESC "
+      ]
+    },
+    {
+      "name": "ds_trend",
+      "displayName": "Quarantine trend",
+      "queryLines": [
+        "SELECT recorded_at, study_id, pct_subjects_quarantined, status FROM dq_run_history ORDER BY recorded_at "
+      ]
+    },
+    {
+      "name": "ds_thresholds",
+      "displayName": "Threshold status",
+      "queryLines": [
+        "SELECT study_id, metric, value, warn, critical, status FROM dq_threshold_status ",
+        "ORDER BY CASE status WHEN 'critical' THEN 0 WHEN 'warn' THEN 1 ELSE 2 END, study_id, metric "
+      ]
+    },
+    {
+      "name": "ds_ai",
+      "displayName": "AI data modelling attempts",
+      "queryLines": [
+        "SELECT recorded_at, study_id, submission_id, actor, attempt, scenario, accuracy_pct, threshold_pct, outcome, wrong_columns ",
+        "FROM ai_modelling_runs ORDER BY recorded_at DESC, attempt DESC "
+      ]
+    },
+    {
+      "name": "ds_remediation",
+      "displayName": "Remediation log",
+      "queryLines": [
+        "SELECT recorded_at, study_id, waivers_added, subjects_clean_before, subjects_clean_after, ",
+        "subjects_quarantined_before, subjects_quarantined_after, unbalanced_domains FROM dq_remediation_log ORDER BY recorded_at DESC "
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "name": "overview",
+      "displayName": "Data quality",
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layoutVersion": "GRID_V1",
+      "layout": [
+        {
+          "widget": {
+            "name": "title",
+            "multilineTextboxSpec": {
+              "lines": [
+                "# Clinical Study Hub: data quality\n",
+                "\n",
+                "Synthetic demo data. Quarantine keeps unclean subjects out of Gold, Genie and the AI insights; nothing is dropped. Thresholds and notifications below tell the data management team when to act."
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 12,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "kpi-critical",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_kpi",
+                  "fields": [
+                    {
+                      "name": "critical_studies",
+                      "expression": "`critical_studies`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "critical_studies",
+                  "displayName": "Studies in critical"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Studies in critical"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 2,
+            "width": 3,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "kpi-warn",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_kpi",
+                  "fields": [
+                    {
+                      "name": "warn_studies",
+                      "expression": "`warn_studies`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "warn_studies",
+                  "displayName": "Studies in warn"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Studies in warn"
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 2,
+            "width": 3,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "kpi-subjects",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_kpi",
+                  "fields": [
+                    {
+                      "name": "subjects_quarantined",
+                      "expression": "`subjects_quarantined`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "subjects_quarantined",
+                  "displayName": "Subjects quarantined"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Subjects quarantined"
+              }
+            }
+          },
+          "position": {
+            "x": 6,
+            "y": 2,
+            "width": 3,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "kpi-pct",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_kpi",
+                  "fields": [
+                    {
+                      "name": "pct_quarantined",
+                      "expression": "`pct_quarantined`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "pct_quarantined",
+                  "displayName": "% subjects quarantined (all studies)"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "% subjects quarantined (all studies)"
+              }
+            }
+          },
+          "position": {
+            "x": 9,
+            "y": 2,
+            "width": 3,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "section-study",
+            "multilineTextboxSpec": {
+              "lines": [
+                "## Quarantine by study\n"
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 5,
+            "width": 12,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "bar-pct-quarantined",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_status",
+                  "fields": [
+                    {
+                      "name": "study_id",
+                      "expression": "`study_id`"
+                    },
+                    {
+                      "name": "pct_quarantined",
+                      "expression": "`pct_quarantined`"
+                    },
+                    {
+                      "name": "status",
+                      "expression": "`status`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "study_id",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "Study"
+                },
+                "y": {
+                  "fieldName": "pct_quarantined",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "% subjects quarantined"
+                },
+                "color": {
+                  "fieldName": "status",
+                  "scale": {
+                    "type": "categorical",
+                    "mappings": [
+                      {
+                        "value": "critical",
+                        "color": "#FF7E5C"
+                      },
+                      {
+                        "value": "warn",
+                        "color": "#FFC857"
+                      },
+                      {
+                        "value": "ok",
+                        "color": "#4DB6AC"
+                      }
+                    ]
+                  },
+                  "displayName": "Threshold status"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "% of subjects quarantined per study",
+                "showDescription": true,
+                "description": "Warn at 15%, critical at 25% (editable in dq_thresholds)"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 6,
+            "width": 6,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "bar-reasons",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_reasons",
+                  "fields": [
+                    {
+                      "name": "study_id",
+                      "expression": "`study_id`"
+                    },
+                    {
+                      "name": "rule",
+                      "expression": "`rule`"
+                    },
+                    {
+                      "name": "sum(subjects_affected)",
+                      "expression": "SUM(`subjects_affected`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "study_id",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "Study"
+                },
+                "y": {
+                  "fieldName": "sum(subjects_affected)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Subjects affected"
+                },
+                "color": {
+                  "fieldName": "rule",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "Rule"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Why subjects are quarantined (rule by domain)"
+              }
+            }
+          },
+          "position": {
+            "x": 6,
+            "y": 6,
+            "width": 6,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "line-trend",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_trend",
+                  "fields": [
+                    {
+                      "name": "recorded_at",
+                      "expression": "`recorded_at`"
+                    },
+                    {
+                      "name": "pct_subjects_quarantined",
+                      "expression": "`pct_subjects_quarantined`"
+                    },
+                    {
+                      "name": "study_id",
+                      "expression": "`study_id`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "recorded_at",
+                  "scale": {
+                    "type": "temporal"
+                  },
+                  "displayName": "Pipeline run"
+                },
+                "y": {
+                  "fieldName": "pct_subjects_quarantined",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "% subjects quarantined"
+                },
+                "color": {
+                  "fieldName": "study_id",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "Study"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Quarantine trend by pipeline run"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 12,
+            "width": 6,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "table-thresholds",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_thresholds",
+                  "fields": [
+                    {
+                      "name": "study_id",
+                      "expression": "`study_id`"
+                    },
+                    {
+                      "name": "metric",
+                      "expression": "`metric`"
+                    },
+                    {
+                      "name": "value",
+                      "expression": "`value`"
+                    },
+                    {
+                      "name": "warn",
+                      "expression": "`warn`"
+                    },
+                    {
+                      "name": "critical",
+                      "expression": "`critical`"
+                    },
+                    {
+                      "name": "status",
+                      "expression": "`status`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "study_id",
+                    "displayName": "Study"
+                  },
+                  {
+                    "fieldName": "metric",
+                    "displayName": "Metric"
+                  },
+                  {
+                    "fieldName": "value",
+                    "displayName": "Value"
+                  },
+                  {
+                    "fieldName": "warn",
+                    "displayName": "Warn at"
+                  },
+                  {
+                    "fieldName": "critical",
+                    "displayName": "Critical at"
+                  },
+                  {
+                    "fieldName": "status",
+                    "displayName": "Status",
+                    "style": {
+                      "type": "basic",
+                      "rules": [
+                        {
+                          "condition": {
+                            "operand": {
+                              "type": "data-value",
+                              "value": "critical"
+                            },
+                            "operator": "=="
+                          },
+                          "backgroundColor": "#FF7E5C"
+                        },
+                        {
+                          "condition": {
+                            "operand": {
+                              "type": "data-value",
+                              "value": "warn"
+                            },
+                            "operator": "=="
+                          },
+                          "backgroundColor": "#FFC857"
+                        }
+                      ]
+                    }
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Threshold status by study and metric"
+              }
+            }
+          },
+          "position": {
+            "x": 6,
+            "y": 12,
+            "width": 6,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "section-ai",
+            "multilineTextboxSpec": {
+              "lines": [
+                "## AI data modelling (mock) and remediation\n"
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 18,
+            "width": 12,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "table-ai",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_ai",
+                  "fields": [
+                    {
+                      "name": "recorded_at",
+                      "expression": "`recorded_at`"
+                    },
+                    {
+                      "name": "study_id",
+                      "expression": "`study_id`"
+                    },
+                    {
+                      "name": "actor",
+                      "expression": "`actor`"
+                    },
+                    {
+                      "name": "attempt",
+                      "expression": "`attempt`"
+                    },
+                    {
+                      "name": "scenario",
+                      "expression": "`scenario`"
+                    },
+                    {
+                      "name": "accuracy_pct",
+                      "expression": "`accuracy_pct`"
+                    },
+                    {
+                      "name": "threshold_pct",
+                      "expression": "`threshold_pct`"
+                    },
+                    {
+                      "name": "outcome",
+                      "expression": "`outcome`"
+                    },
+                    {
+                      "name": "wrong_columns",
+                      "expression": "`wrong_columns`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "recorded_at",
+                    "displayName": "Recorded"
+                  },
+                  {
+                    "fieldName": "study_id",
+                    "displayName": "Study"
+                  },
+                  {
+                    "fieldName": "actor",
+                    "displayName": "Actor"
+                  },
+                  {
+                    "fieldName": "attempt",
+                    "displayName": "Attempt"
+                  },
+                  {
+                    "fieldName": "scenario",
+                    "displayName": "Scenario"
+                  },
+                  {
+                    "fieldName": "accuracy_pct",
+                    "displayName": "Accuracy %"
+                  },
+                  {
+                    "fieldName": "threshold_pct",
+                    "displayName": "Threshold %"
+                  },
+                  {
+                    "fieldName": "outcome",
+                    "displayName": "Outcome"
+                  },
+                  {
+                    "fieldName": "wrong_columns",
+                    "displayName": "Wrong columns"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "AI data modelling attempts, retries and human fallback"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 19,
+            "width": 12,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "table-remediation",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_remediation",
+                  "fields": [
+                    {
+                      "name": "recorded_at",
+                      "expression": "`recorded_at`"
+                    },
+                    {
+                      "name": "study_id",
+                      "expression": "`study_id`"
+                    },
+                    {
+                      "name": "waivers_added",
+                      "expression": "`waivers_added`"
+                    },
+                    {
+                      "name": "subjects_clean_before",
+                      "expression": "`subjects_clean_before`"
+                    },
+                    {
+                      "name": "subjects_clean_after",
+                      "expression": "`subjects_clean_after`"
+                    },
+                    {
+                      "name": "subjects_quarantined_before",
+                      "expression": "`subjects_quarantined_before`"
+                    },
+                    {
+                      "name": "subjects_quarantined_after",
+                      "expression": "`subjects_quarantined_after`"
+                    },
+                    {
+                      "name": "unbalanced_domains",
+                      "expression": "`unbalanced_domains`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "recorded_at",
+                    "displayName": "Recorded"
+                  },
+                  {
+                    "fieldName": "study_id",
+                    "displayName": "Study"
+                  },
+                  {
+                    "fieldName": "waivers_added",
+                    "displayName": "Waivers added"
+                  },
+                  {
+                    "fieldName": "subjects_clean_before",
+                    "displayName": "Clean before"
+                  },
+                  {
+                    "fieldName": "subjects_clean_after",
+                    "displayName": "Clean after"
+                  },
+                  {
+                    "fieldName": "subjects_quarantined_before",
+                    "displayName": "Quarantined before"
+                  },
+                  {
+                    "fieldName": "subjects_quarantined_after",
+                    "displayName": "Quarantined after"
+                  },
+                  {
+                    "fieldName": "unbalanced_domains",
+                    "displayName": "Unbalanced domains"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Quarantine remediation runs"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 25,
+            "width": 12,
+            "height": 5
+          }
+        }
+      ]
+    }
+  ],
+  "uiSettings": {
+    "theme": {
+      "canvasBackgroundColor": {
+        "light": "#FCFCFC",
+        "dark": "#1F272D"
+      },
+      "widgetBackgroundColor": {
+        "light": "#FFFFFF",
+        "dark": "#11171C"
+      },
+      "fontColor": {
+        "light": "#11171C",
+        "dark": "#E8ECF0"
+      },
+      "selectionColor": {
+        "light": "#2272B4",
+        "dark": "#8ACAFF"
+      },
+      "visualizationColors": [
+        "#4E79A7",
+        "#F28E2C",
+        "#76B7B2",
+        "#E15759",
+        "#59A14F",
+        "#EDC948",
+        "#B07AA1",
+        "#9C755F"
+      ],
+      "widgetHeaderAlignment": "LEFT"
+    }
+  }
+}

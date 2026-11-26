@@ -9,7 +9,8 @@
 # MAGIC 3. Copy the **App URL** from the last cell
 # MAGIC
 # MAGIC Order of work:
-# MAGIC 1. Platform bundle (schema, volumes, Lakeflow Declarative Pipelines, job)
+# MAGIC 1. Platform bundle (schema, volumes, Lakeflow Declarative Pipelines, the onboarding job with alerts, the
+# MAGIC    quarantine remediation and manual data modelling jobs, the data quality dashboard and SQL alert)
 # MAGIC 2. Upload sample zips
 # MAGIC 3. Process **ONC-101** and **CARD-202** so the portfolio is not empty
 # MAGIC 4. Lakebase (approvals state)
@@ -30,6 +31,7 @@ dbutils.widgets.dropdown("deploy_app", "yes", ["yes", "no"], "7. Deploy Study Hu
 dbutils.widgets.dropdown("seed_studies", "yes", ["yes", "no"], "8. Process ONC-101 + CARD-202?")
 dbutils.widgets.text("lakebase_project", "study-hub", "9. Lakebase project id")
 dbutils.widgets.text("genie_title", "Study Insights", "10. Genie space title")
+dbutils.widgets.text("alert_email", "", "11. Alert email (blank = you)")
 
 CATALOG = dbutils.widgets.get("catalog").strip()
 SCHEMA = dbutils.widgets.get("schema").strip()
@@ -41,6 +43,7 @@ DEPLOY_APP = dbutils.widgets.get("deploy_app") == "yes"
 SEED_STUDIES = dbutils.widgets.get("seed_studies") == "yes"
 LAKEBASE_PROJECT = dbutils.widgets.get("lakebase_project").strip() or "study-hub"
 GENIE_TITLE = dbutils.widgets.get("genie_title").strip() or "Study Insights"
+ALERT_EMAIL_INPUT = dbutils.widgets.get("alert_email").strip()
 
 if not WAREHOUSE_ID:
     raise ValueError(
@@ -227,6 +230,8 @@ for v in [
     f"schema={SCHEMA}",
     f"warehouse_id={WAREHOUSE_ID}",
     f"llm_endpoint={LLM_ENDPOINT}",
+    # Job failure, duration and data quality alerts go here; blank means the user running this notebook.
+    f"alert_email={ALERT_EMAIL_INPUT or w.current_user.me().user_name}",
 ]:
     var_args += ["--var", v]
 
@@ -244,6 +249,19 @@ except Exception:
 if not JOB_ID:
     raise RuntimeError("Could not resolve study_onboarding_job id")
 print("job_id=", JOB_ID)
+
+
+def bundle_id(kind: str, key: str) -> str:
+    try:
+        return str(summary["resources"][kind][key]["id"])
+    except Exception as exc:
+        raise RuntimeError(f"Could not resolve {kind}.{key} id from the bundle summary") from exc
+
+
+MANUAL_JOB_ID = bundle_id("jobs", "manual_data_modelling_job")
+REMEDIATION_JOB_ID = bundle_id("jobs", "quarantine_remediation_job")
+DASHBOARD_ID = str(summary.get("resources", {}).get("dashboards", {}).get("dq_overview", {}).get("id", ""))
+print("manual_job_id=", MANUAL_JOB_ID, "remediation_job_id=", REMEDIATION_JOB_ID, "dashboard_id=", DASHBOARD_ID)
 
 # COMMAND ----------
 
@@ -505,6 +523,7 @@ APP_VARS = [
     f"files_path=/Volumes/{CATALOG}/{SCHEMA}/landing",
     f"files_id={CATALOG}.{SCHEMA}.landing",
     f"job_id={JOB_ID}",
+    f"manual_job_id={MANUAL_JOB_ID}",
     f"postgres_branch={POSTGRES_BRANCH}",
     f"postgres_database={POSTGRES_DATABASE}",
     f"genie_space_id={GENIE_SPACE_ID or 'none'}",
@@ -616,7 +635,11 @@ summary_md = f"""
 |------|-------|
 | Catalog.schema | `{CATALOG}.{SCHEMA}` |
 | SQL warehouse | `{WAREHOUSE_ID}` |
-| Onboarding job id | `{JOB_ID}` |
+| Onboarding job id | `{JOB_ID}` (alerts: failure, run longer than 10 minutes, 30 minute timeout) |
+| Manual data modelling job id | `{MANUAL_JOB_ID}` (human fallback when AI modelling accuracy is below 99.9%) |
+| Quarantine remediation job id | `{REMEDIATION_JOB_ID}` (run on demand with a `study_id` after reviewing quarantine) |
+| Data quality dashboard | `{DASHBOARD_ID or 'Dashboards -> Study Hub - data quality'}` |
+| Alert email | `{ALERT_EMAIL_INPUT or w.current_user.me().user_name}` |
 | Landing volume | `/Volumes/{CATALOG}/{SCHEMA}/landing` |
 | Samples volume | `/Volumes/{CATALOG}/{SCHEMA}/samples` |
 | Seeded studies | `ONC-101`, `CARD-202` (skipped RESP-303) |
@@ -629,7 +652,10 @@ summary_md = f"""
 1. Open the App URL (warehouse is already warm from the seed jobs).
 2. Portfolio should already show ONC-101 and CARD-202.
 3. **Onboard a Study** with `demo_assets/RESP-303_study_package.zip`.
-4. Admin → Approvals → Approve & process → insights + Ask Genie.
+4. Admin → Approvals → pick an AI modelling simulation (Normal, Recover, or Fail to see the manual fallback) →
+   Approve & process → insights + Ask Genie.
+5. Open the study's **Quarantine** tab for threshold status; the data quality dashboard shows all studies.
+6. After reviewing quarantined issues (mark them Accepted), run the `quarantine-remediation` job with that `study_id`.
 """
 print(summary_md)
 try:

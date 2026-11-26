@@ -10,6 +10,11 @@ import {
   CardHeader,
   CardTitle,
   Label,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
   Table,
   TableBody,
   TableCell,
@@ -20,17 +25,19 @@ import {
   useAnalyticsQuery,
 } from '@databricks/appkit-ui/react';
 import { sql } from '@databricks/appkit-ui/js';
-import { CheckCircle2, ExternalLink, Loader2, ShieldCheck, XCircle } from 'lucide-react';
+import { CheckCircle2, ExternalLink, Hand, Loader2, ShieldCheck, XCircle } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { EmptyBlock, ErrorBlock, LoadingBlock, PageHeader, PipelineProgress, StatusBadge } from '../components/common';
 import { usePersona } from '../lib/persona';
 import {
+  AI_SCENARIO_LABEL,
   DOMAIN_LABEL,
   formatBytes,
   formatDateTime,
   readError,
   useSubmissions,
+  type AiScenario,
   type Submission,
   type SubmissionEvent,
 } from '../lib/submissions';
@@ -79,10 +86,57 @@ function StagingReport({ submissionId }: { submissionId: string }) {
   );
 }
 
+function ModellingReport({ submissionId }: { submissionId: string }) {
+  const params = useMemo(() => ({ submission_id: sql.string(submissionId) }), [submissionId]);
+  const attempts = useAnalyticsQuery('ai_modelling', params);
+  const rows = attempts.data ?? [];
+  if (attempts.loading) return <LoadingBlock rows={1} height="h-4" />;
+  if (attempts.error || rows.length === 0) return null;
+  return (
+    <div>
+      <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        AI data modelling (mock)
+      </div>
+      <p className="mb-2 text-xs text-muted-foreground">
+        The AI step proposes how source columns map to SDTM variables and is validated against the mapping spec. Below the
+        accuracy threshold it retries with feedback, then hands over to a person.
+      </p>
+      <div className="rounded-md border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Attempt</TableHead>
+              <TableHead>Actor</TableHead>
+              <TableHead className="text-right">Accuracy</TableHead>
+              <TableHead>Outcome</TableHead>
+              <TableHead>Wrong columns</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((r) => (
+              <TableRow key={`${r.actor}-${r.attempt}-${r.recorded_at}`}>
+                <TableCell className="text-xs">{r.actor === 'ai' ? r.attempt : '\u2014'}</TableCell>
+                <TableCell className="text-xs">{r.actor}</TableCell>
+                <TableCell className="text-right text-xs tabular-nums">
+                  {r.actor === 'system' ? '\u2014' : `${Number(r.accuracy_pct).toFixed(3)}%`}
+                  {r.actor === 'ai' && <span className="text-muted-foreground"> / {Number(r.threshold_pct)}%</span>}
+                </TableCell>
+                <TableCell className="text-xs">{String(r.outcome).replaceAll('_', ' ')}</TableCell>
+                <TableCell className="font-mono text-xs">{r.wrong_columns || '\u2014'}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
+  );
+}
+
 function ReviewPanel({ submission, onDone }: { submission: Submission; onDone: () => Promise<void> }) {
   const { apiFetch } = usePersona();
   const [comment, setComment] = useState('');
-  const [busy, setBusy] = useState<'approve' | 'reject' | null>(null);
+  const [busy, setBusy] = useState<'approve' | 'reject' | 'manual' | null>(null);
+  const [scenario, setScenario] = useState<AiScenario>('pass');
   const [error, setError] = useState<string | null>(null);
   const [events, setEvents] = useState<SubmissionEvent[] | null>(null);
 
@@ -106,8 +160,25 @@ function ReviewPanel({ submission, onDone }: { submission: Submission; onDone: (
     try {
       const res = await apiFetch(`/api/submissions/${submission.submission_id}/${action}`, {
         method: 'POST',
-        body: JSON.stringify({ comment: comment.trim() || undefined }),
+        body: JSON.stringify({
+          comment: comment.trim() || undefined,
+          ai_demo_scenario: action === 'approve' ? scenario : undefined,
+        }),
       });
+      if (!res.ok) throw new Error(await readError(res));
+      await onDone();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const startManual = async () => {
+    setBusy('manual');
+    setError(null);
+    try {
+      const res = await apiFetch(`/api/submissions/${submission.submission_id}/manual-modelling`, { method: 'POST', body: '{}' });
       if (!res.ok) throw new Error(await readError(res));
       await onDone();
     } catch (e) {
@@ -204,6 +275,25 @@ function ReviewPanel({ submission, onDone }: { submission: Submission; onDone: (
                 placeholder="Optional for approval, recommended when rejecting"
               />
             </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="ai-scenario">AI data modelling (demo simulation)</Label>
+              <Select value={scenario} onValueChange={(v) => setScenario(v as AiScenario)}>
+                <SelectTrigger id="ai-scenario" className="w-full md:w-[28rem]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {(Object.keys(AI_SCENARIO_LABEL) as AiScenario[]).map((k) => (
+                    <SelectItem key={k} value={k}>
+                      {AI_SCENARIO_LABEL[k]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                The AI proposal is a mock. The accuracy check (99.9% of mapped values), the 3 retries and the human
+                fallback are real job logic.
+              </p>
+            </div>
             {error && <ErrorBlock title="Action failed" message={error} />}
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => void act('reject')} disabled={busy !== null}>
@@ -216,14 +306,35 @@ function ReviewPanel({ submission, onDone }: { submission: Submission; onDone: (
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">
-              Approving starts the onboarding job: unzip &amp; stage, then the Lakeflow Declarative Pipeline (records
+              Approving starts the onboarding job: unzip &amp; stage, AI data modelling with an accuracy gate, then the Lakeflow Declarative Pipeline (records
               that fail a data quality rule go to quarantine, never dropped), then AI insights on clean subjects.
             </p>
           </div>
         ) : (
           <div className="space-y-2 rounded-lg border p-4">
-            {(submission.status === 'PROCESSING' || submission.status === 'PUBLISHED' || submission.status === 'FAILED') && (
+            {(submission.status === 'PROCESSING' ||
+              submission.status === 'PUBLISHED' ||
+              submission.status === 'FAILED' ||
+              submission.status === 'AWAITING_MANUAL_MODELLING') && (
               <PipelineProgress tasks={submission.run_tasks} status={submission.status} />
+            )}
+            {submission.status === 'AWAITING_MANUAL_MODELLING' && (
+              <Alert>
+                <Hand className="h-4 w-4" />
+                <AlertTitle>Waiting for manual data modelling</AlertTitle>
+                <AlertDescription>
+                  <p>
+                    The AI data modelling stayed below the accuracy threshold after all retries, so nothing was run on
+                    this package and nothing was published. The team was notified by email. After a reviewer has checked
+                    the mapping, start the manual data modelling job, which applies it and runs the same pipeline.
+                  </p>
+                  {error && <p className="mt-2 text-destructive">{error}</p>}
+                  <Button className="mt-3" size="sm" onClick={() => void startManual()} disabled={busy !== null}>
+                    {busy === 'manual' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Hand className="mr-2 h-4 w-4" />}
+                    Start manual modelling
+                  </Button>
+                </AlertDescription>
+              </Alert>
             )}
             <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
               {submission.reviewed_by && (
@@ -248,7 +359,13 @@ function ReviewPanel({ submission, onDone }: { submission: Submission; onDone: (
 
         {(submission.status === 'PROCESSING' ||
           submission.status === 'PUBLISHED' ||
-          submission.status === 'FAILED') && <StagingReport submissionId={submission.submission_id} />}
+          submission.status === 'FAILED' ||
+          submission.status === 'AWAITING_MANUAL_MODELLING') && (
+          <>
+            <ModellingReport submissionId={submission.submission_id} />
+            <StagingReport submissionId={submission.submission_id} />
+          </>
+        )}
 
         <div>
           <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Audit trail</div>

@@ -1,0 +1,7 @@
+study_id,status,critical_metrics,warn_metrics,breaches
+CARD-202,critical,1,1,"pct_subjects_quarantined=28.8 (critical), top_rule_share_pct=51.5 (warn)"
+DERM-404,critical,1,1,"pct_subjects_quarantined=27.3 (critical), top_rule_share_pct=66.7 (warn)"
+IMMUNO-606,critical,1,1,"pct_subjects_quarantined=27.3 (critical), top_rule_share_pct=66.7 (warn)"
+NEURO-505,critical,1,1,"pct_subjects_quarantined=27.3 (critical), top_rule_share_pct=66.7 (warn)"
+ONC-101,warn,0,1,pct_subjects_quarantined=20.2 (warn)
+RESP-303,critical,1,1,"pct_subjects_quarantined=27.3 (critical), top_rule_share_pct=66.7 (warn)"

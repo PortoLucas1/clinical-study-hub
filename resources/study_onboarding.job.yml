@@ -3,12 +3,24 @@ resources:
     study_onboarding_job:
       name: study-onboarding
       description: >-
-        Onboards an approved clinical study package: unzip and stage files, run
-        Lakeflow Declarative Pipelines (Bronze → Silver → Gold), generate AI study insights, then publish the
-        portfolio table that Lakebase serves to the app.
+        Onboards an approved clinical study package: unzip and stage files, AI-assisted data modelling (mock) with an
+        accuracy gate and a human fallback, Lakeflow Declarative Pipelines (Bronze, Silver, Gold), data quality
+        threshold check, AI study insights, then publish the portfolio table that Lakebase serves to the app.
       max_concurrent_runs: 1
+      timeout_seconds: ${var.job_timeout_seconds}
       queue:
         enabled: true
+      # Immediate notification when a run fails or runs much longer than the usual ~5 minutes.
+      email_notifications:
+        on_failure:
+          - ${var.alert_email}
+        on_duration_warning_threshold_exceeded:
+          - ${var.alert_email}
+      health:
+        rules:
+          - metric: RUN_DURATION_SECONDS
+            op: GREATER_THAN
+            value: ${var.job_duration_warning_seconds}
       parameters:
         - name: submission_id
           default: ""
@@ -24,15 +36,57 @@ resources:
           default: ${var.llm_endpoint}
         - name: synced_table
           default: ${var.portfolio_synced_table}
+        - name: pipeline_id
+          default: ${resources.pipelines.study_pipeline.id}
+        # Mock AI modelling: pass | recover | fail (see src/notebooks/02_ai_data_modelling.py)
+        - name: ai_demo_scenario
+          default: pass
+        - name: ai_accuracy_threshold
+          default: ${var.ai_accuracy_threshold}
+        - name: ai_max_retries
+          default: ${var.ai_max_retries}
       tasks:
         - task_key: unzip_and_stage
           notebook_task:
             notebook_path: ../src/notebooks/01_unzip_and_stage.py
-        - task_key: declarative_pipeline
+        - task_key: ai_data_modelling
           depends_on:
             - task_key: unzip_and_stage
+          # Retries happen inside the notebook (with validation feedback), so the job must not re-run it blindly.
+          max_retries: 0
+          notebook_task:
+            notebook_path: ../src/notebooks/02_ai_data_modelling.py
+        # Continue automatically only when the AI modelling accuracy meets the threshold.
+        - task_key: modelling_accuracy_gate
+          depends_on:
+            - task_key: ai_data_modelling
+          condition_task:
+            op: GREATER_THAN_OR_EQUAL
+            left: "{{tasks.ai_data_modelling.values.accuracy_pct}}"
+            right: ${var.ai_accuracy_threshold}
+        # Fallback: the team is notified and the submission waits for the manual_data_modelling job.
+        - task_key: manual_modelling_handoff
+          depends_on:
+            - task_key: modelling_accuracy_gate
+              outcome: "false"
+          notebook_task:
+            notebook_path: ../src/notebooks/02b_manual_modelling_handoff.py
+          email_notifications:
+            on_success:
+              - ${var.alert_email}
+        - task_key: declarative_pipeline
+          depends_on:
+            - task_key: modelling_accuracy_gate
+              outcome: "true"
           pipeline_task:
             pipeline_id: ${resources.pipelines.study_pipeline.id}
+        - task_key: dq_threshold_check
+          depends_on:
+            - task_key: declarative_pipeline
+          notebook_task:
+            notebook_path: ../src/notebooks/05_dq_threshold_check.py
+            base_parameters:
+              run_id: "{{job.run_id}}"
         - task_key: study_insights
           depends_on:
             - task_key: declarative_pipeline
@@ -41,5 +95,6 @@ resources:
         - task_key: publish_portfolio
           depends_on:
             - task_key: study_insights
+            - task_key: dq_threshold_check
           notebook_task:
             notebook_path: ../src/notebooks/04_publish_portfolio.py

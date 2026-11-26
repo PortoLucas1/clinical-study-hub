@@ -29,7 +29,7 @@ import { sql } from '@databricks/appkit-ui/js';
 import { AlertTriangle, ArrowLeft, Lightbulb, ShieldAlert, Sparkles } from 'lucide-react';
 import { useMemo, useState, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router';
-import { BrandHeading, EmptyBlock, ErrorBlock, KpiTile, LoadingBlock } from '../components/common';
+import { BrandHeading, EmptyBlock, ErrorBlock, KpiTile, LoadingBlock, ThresholdBadge } from '../components/common';
 import { StudyGenie } from '../components/StudyGenie';
 import { usePersona } from '../lib/persona';
 import { pivot } from '../lib/pivot';
@@ -547,6 +547,7 @@ function QuarantineTab({ studyId }: { studyId: string }) {
   const recon = useAnalyticsQuery('dq_reconciliation', params);
   const subjects = useAnalyticsQuery('quarantine_subjects', params);
   const issues = useAnalyticsQuery('dq_issues', params);
+  const thresholds = useAnalyticsQuery('dq_threshold_status', params);
   const { reviews, error: reviewError, save } = useDqReviews(studyId);
   const [subject, setSubject] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -597,6 +598,41 @@ function QuarantineTab({ studyId }: { studyId: string }) {
           />
         </div>
       ) : null}
+
+      <Section
+        title="Data quality thresholds"
+        description="Compared after every pipeline run. A breach never blocks publishing (quarantine already protects the clean data); it notifies the data management team. Thresholds are editable in the dq_thresholds table."
+      >
+        <QueryState loading={thresholds.loading} error={thresholds.error} empty={(thresholds.data ?? []).length === 0}>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Metric</TableHead>
+                <TableHead className="text-right">Value</TableHead>
+                <TableHead className="text-right">Warn at</TableHead>
+                <TableHead className="text-right">Critical at</TableHead>
+                <TableHead>Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {(thresholds.data ?? []).map((t) => (
+                <TableRow key={t.metric}>
+                  <TableCell className="text-xs">
+                    <div className="font-mono">{t.metric}</div>
+                    <div className="text-muted-foreground">{t.description}</div>
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">{t.value ?? '\u2014'}</TableCell>
+                  <TableCell className="text-right tabular-nums">{t.warn}</TableCell>
+                  <TableCell className="text-right tabular-nums">{t.critical}</TableCell>
+                  <TableCell>
+                    <ThresholdBadge status={t.status} />
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </QueryState>
+      </Section>
 
       <Section
         title="Row reconciliation"
@@ -746,7 +782,9 @@ export function StudyPage() {
   const { email } = usePersona();
   const params = useStudyParams(studyId);
   const overview = useAnalyticsQuery('study_overview', params);
+  const dqStatus = useAnalyticsQuery('dq_study_status', null);
   const o = overview.data?.[0];
+  const dq = (dqStatus.data ?? []).find((r) => String(r.study_id) === studyId);
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-6">
@@ -763,6 +801,7 @@ export function StudyPage() {
               {o?.phase && <Badge variant="outline">{o.phase}</Badge>}
               {o?.therapeutic_area && <Badge variant="secondary">{o.therapeutic_area}</Badge>}
               {o?.nct_id && <Badge variant="outline">{o.nct_id}</Badge>}
+              {dq && <ThresholdBadge status={dq.status} title={String(dq.breaches ?? '') || undefined} />}
             </div>
             <p className="mt-1 max-w-4xl text-sm text-muted-foreground">
               {overview.loading ? 'Loading study…' : o?.title ?? 'Study not found in the hub'}

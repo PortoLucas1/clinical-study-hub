@@ -1,0 +1,35 @@
+resources:
+  dashboards:
+    dq_overview:
+      display_name: "Study Hub - data quality"
+      file_path: ../dashboards/dq_overview.dashboard.json
+      warehouse_id: ${var.warehouse_id}
+      dataset_catalog: ${var.catalog}
+      dataset_schema: ${var.schema}
+
+  alerts:
+    dq_critical_alert:
+      display_name: "Study Hub - data quality critical"
+      query_text: >-
+        SELECT count(*) AS critical_studies
+        FROM ${var.catalog}.${var.schema}.dq_study_status
+        WHERE status = 'critical'
+      warehouse_id: ${var.warehouse_id}
+      parent_path: ${workspace.resource_path}
+      evaluation:
+        comparison_operator: GREATER_THAN
+        source:
+          name: critical_studies
+          display: critical_studies
+        threshold:
+          value:
+            double_value: 0
+        empty_result_state: OK
+        notification:
+          notify_on_ok: false
+          subscriptions:
+            - user_email: ${var.alert_email}
+      schedule:
+        quartz_cron_schedule: "0 0/15 * * * ?"
+        timezone_id: UTC
+        pause_status: UNPAUSED

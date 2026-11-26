@@ -149,6 +149,18 @@ CREATE TABLE IF NOT EXISTS {catalog}.{schema}.study_registry (
 ) COMMENT 'Operational registry of onboarded studies and their latest approved package'
 """)
 spark.sql(f"""
+CREATE TABLE IF NOT EXISTS {catalog}.{schema}.dq_waivers (
+  study_id STRING, submission_id STRING, domain STRING, rule_id STRING, usubjid STRING,
+  accepted_by STRING, accepted_at TIMESTAMP, comment STRING
+) COMMENT 'Data quality issues a data manager accepted (waived) for a subject. The Silver layer no longer quarantines a record for a waived rule. Written by the quarantine_remediation job; tied to the submission it was accepted for'
+""")
+spark.sql(f"""
+CREATE TABLE IF NOT EXISTS {catalog}.{schema}.dq_remediation_log (
+  run_id STRING, study_id STRING, waivers_added BIGINT, subjects_clean_before BIGINT, subjects_clean_after BIGINT,
+  subjects_quarantined_before BIGINT, subjects_quarantined_after BIGINT, unbalanced_domains BIGINT, recorded_at TIMESTAMP
+) COMMENT 'Outcome of every quarantine remediation run: subjects returned to Gold and the reconciliation check'
+""")
+spark.sql(f"""
 CREATE TABLE IF NOT EXISTS {catalog}.{schema}.submission_files (
   submission_id STRING, study_id STRING, domain STRING, source_file STRING,
   staged_path STRING, row_count BIGINT, status STRING, staged_at TIMESTAMP

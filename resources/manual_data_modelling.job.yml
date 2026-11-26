@@ -1,0 +1,65 @@
+resources:
+  jobs:
+    manual_data_modelling_job:
+      name: manual-data-modelling
+      description: >-
+        Human-in-the-loop fallback for submissions whose AI data modelling stayed below the accuracy threshold.
+        A reviewer starts it for one submission (from the Study Hub approvals page or the Jobs UI). It applies the
+        reviewed mapping (mock), then runs the same Lakeflow Declarative Pipelines, threshold check, insights and
+        portfolio tasks as the automatic flow.
+      max_concurrent_runs: 1
+      timeout_seconds: ${var.job_timeout_seconds}
+      queue:
+        enabled: true
+      email_notifications:
+        on_failure:
+          - ${var.alert_email}
+        on_duration_warning_threshold_exceeded:
+          - ${var.alert_email}
+      health:
+        rules:
+          - metric: RUN_DURATION_SECONDS
+            op: GREATER_THAN
+            value: ${var.job_duration_warning_seconds}
+      parameters:
+        - name: submission_id
+          default: ""
+        - name: study_id
+          default: ""
+        - name: reviewer
+          default: ""
+        - name: catalog
+          default: ${var.catalog}
+        - name: schema
+          default: ${var.schema}
+        - name: llm_endpoint
+          default: ${var.llm_endpoint}
+        - name: synced_table
+          default: ${var.portfolio_synced_table}
+      tasks:
+        - task_key: apply_manual_modelling
+          notebook_task:
+            notebook_path: ../src/notebooks/07_apply_manual_modelling.py
+        - task_key: declarative_pipeline
+          depends_on:
+            - task_key: apply_manual_modelling
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.study_pipeline.id}
+        - task_key: dq_threshold_check
+          depends_on:
+            - task_key: declarative_pipeline
+          notebook_task:
+            notebook_path: ../src/notebooks/05_dq_threshold_check.py
+            base_parameters:
+              run_id: "{{job.run_id}}"
+        - task_key: study_insights
+          depends_on:
+            - task_key: declarative_pipeline
+          notebook_task:
+            notebook_path: ../src/notebooks/03_study_insights.py
+        - task_key: publish_portfolio
+          depends_on:
+            - task_key: study_insights
+            - task_key: dq_threshold_check
+          notebook_task:
+            notebook_path: ../src/notebooks/04_publish_portfolio.py
