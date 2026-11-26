@@ -7,7 +7,7 @@ result: no errors (exit 0)
 
 # npm test -> vitest run (app/study-hub)
  Test Files  2 passed (2)
-      Tests  6 passed (6)
+      Tests  11 passed (11)
 
 # pytest tests (data quality rules registry)
-7 passed in 0.01s
+15 passed in 0.03s   (7 rules tests, 8 modelling validator tests)

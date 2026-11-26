@@ -1,0 +1,4 @@
+metric,study_id,warn,critical,description
+pct_subjects_quarantined,,15.0,25.0,Percent of received subjects that are quarantined
+reconciliation_failures,,1.0,1.0,Domains where staged = bronze = clean + quarantine does not balance
+top_rule_share_pct,,50.0,75.0,Percent of quarantined subjects hit by the single most common rule

@@ -1,0 +1,72 @@
+resources:
+  jobs:
+    quarantine_remediation_job:
+      name: quarantine-remediation
+      description: >-
+        Run on demand, independently of the onboarding flow, when the data management team has reviewed a study's
+        quarantined records. Records the accepted issues as waivers, refreshes the Lakeflow Declarative Pipelines so
+        the treated subjects return to Gold, re-checks the data quality thresholds, refreshes the AI insights and the
+        portfolio, then logs what changed and verifies that reconciliation still balances.
+      max_concurrent_runs: 1
+      timeout_seconds: ${var.job_timeout_seconds}
+      queue:
+        enabled: true
+      email_notifications:
+        on_failure:
+          - ${var.alert_email}
+        on_duration_warning_threshold_exceeded:
+          - ${var.alert_email}
+      health:
+        rules:
+          - metric: RUN_DURATION_SECONDS
+            op: GREATER_THAN
+            value: ${var.job_duration_warning_seconds}
+      parameters:
+        - name: study_id
+          default: ""
+        - name: catalog
+          default: ${var.catalog}
+        - name: schema
+          default: ${var.schema}
+        - name: llm_endpoint
+          default: ${var.llm_endpoint}
+        - name: synced_table
+          default: ${var.portfolio_synced_table}
+        - name: lakebase_catalog
+          default: ${var.lakebase_catalog}
+        - name: pipeline_id
+          default: ${resources.pipelines.study_pipeline.id}
+      tasks:
+        - task_key: apply_reviews
+          notebook_task:
+            notebook_path: ../src/notebooks/06_apply_quarantine_reviews.py
+        - task_key: declarative_pipeline
+          depends_on:
+            - task_key: apply_reviews
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.study_pipeline.id}
+        - task_key: dq_threshold_check
+          depends_on:
+            - task_key: declarative_pipeline
+          notebook_task:
+            notebook_path: ../src/notebooks/05_dq_threshold_check.py
+            base_parameters:
+              run_id: "{{job.run_id}}"
+        - task_key: study_insights
+          depends_on:
+            - task_key: declarative_pipeline
+          notebook_task:
+            notebook_path: ../src/notebooks/03_study_insights.py
+        - task_key: publish_portfolio
+          depends_on:
+            - task_key: study_insights
+            - task_key: dq_threshold_check
+          notebook_task:
+            notebook_path: ../src/notebooks/04_publish_portfolio.py
+        - task_key: remediation_summary
+          depends_on:
+            - task_key: publish_portfolio
+          notebook_task:
+            notebook_path: ../src/notebooks/06b_remediation_summary.py
+            base_parameters:
+              run_id: "{{job.run_id}}"

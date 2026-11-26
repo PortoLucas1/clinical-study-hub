@@ -109,3 +109,36 @@ Each decision lists the alternative we did not take, and why.
 - **Chosen:** a submission is uploaded, reviewed by an Admin, and only then runs the job.
 - **Alternative:** a watched landing folder that starts a run on upload.
 - **Why:** a sponsor package should not be processed before a person has checked it is the right study and is complete.
+
+## A gate and a human fallback after the AI modelling step
+
+- **Chosen:** the mock AI data modelling task runs before the pipeline and reports accuracy weighted by values. A
+  condition task passes at 99.9% or above. The task is tried once and retried up to 3 times with feedback on the columns
+  it got wrong; if it still falls short, a hand-off task emails the team and the Approvals page offers the
+  `manual-data-modelling` job.
+- **Alternative:** let the AI mapping flow straight into the pipeline, or fail the job when accuracy is low.
+- **Why:** in clinical data a column that is mapped wrongly looks like valid data, so a low-accuracy run must stop before
+  it reaches Gold. 99.9% is deliberately strict: with 3 subjects in 1,000 wrong, a person should look. Three retries
+  fix the typical case without human time. The retries are inside the task (not the job's own retry) so each attempt is
+  recorded in `ai_modelling_runs`. The AI is mocked with three scenarios so the demo is repeatable; the validator is real.
+
+## Thresholds as data, and alerts at two levels
+
+- **Chosen:** `dq_thresholds` holds warn and critical limits per metric (and per study if needed), `dq_threshold_status`
+  compares them with the current values, and a SQL alert emails when any study is critical. Job failures and long runs
+  are alerted by the job itself.
+- **Alternative:** hard-code limits in the app, or fail the job when quality is poor.
+- **Why:** quality problems are not a job failure (the quarantine already holds the data back), so the job keeps going and
+  the status is shown instead. Limits are table rows so a data manager can change them without a deploy. The demo
+  limits sit around the synthetic data (21.8 to 28.8% of subjects quarantined: warn at 15, critical at 25), so the
+  dashboard shows both states.
+
+## Remediation as waivers, in a separate job
+
+- **Chosen:** quarantine is derived and recomputed on each pipeline update, so a fix cannot edit it directly. When a data
+  manager accepts an issue in the app, the `quarantine-remediation` job copies it to `dq_waivers` (tied to the
+  submission), reruns the pipeline for that study and the waived rule no longer quarantines that subject.
+- **Alternative:** delete rows from the quarantine tables, or edit Silver by hand.
+- **Why:** deleting loses the audit trail, and it would be undone on the next update anyway. A waiver is an explicit,
+  attributed decision, applies only to the submission it was made for (a resubmission starts clean), and the job runs
+  independently of onboarding so remediation does not wait for or block a new study.

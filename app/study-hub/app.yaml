@@ -6,6 +6,8 @@ env:
     valueFrom: files
   - name: DATABRICKS_JOB_ID
     valueFrom: job
+  - name: DATABRICKS_JOB_MANUAL_MODELLING
+    valueFrom: manual-job
   - name: LAKEBASE_ENDPOINT
     valueFrom: postgres
   - name: DATABRICKS_GENIE_SPACE_ID

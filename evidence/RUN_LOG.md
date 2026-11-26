@@ -18,7 +18,8 @@ The data is synthetic. Sponsors are fictional (Synthetic Biopharma Inc., Synthet
 | Study Hub app | `RUNNING`; last deployment `SUCCEEDED` | see "App" below |
 | Quarantine-first data quality (2026-11-26) | Deployed; 6 of 6 checks at zero failures; every staged row reconciles; 143 subjects quarantined, none dropped | see "Quarantine-first data quality" below |
 | Genie contamination check | 8 of 8 probe questions: no quarantined subject in any answer | [`genie_eval.md`](genie_eval.md) |
-| Unit tests and typecheck | 6 of 6 app tests and 7 of 7 rules tests pass; typecheck clean; lint 0 errors | [`tests.txt`](tests.txt) |
+| DQ visibility and fallbacks (2026-11-26) | Deployed and exercised: job alerts, AI modelling gate with retries and human fallback, threshold status, dashboard, SQL alert, remediation job | see "Visibility and fallbacks" below |
+| Unit tests and typecheck | 11 of 11 app tests and 15 of 15 Python tests pass; typecheck clean; lint 0 errors | [`tests.txt`](tests.txt) |
 
 ## Timeline (UTC, 2026-11-25)
 
@@ -135,3 +136,27 @@ Sources: [`query_results/dq_study_coverage.csv`](query_results/dq_study_coverage
 ### Issue found during the run
 
 The first validation run quarantined every DERM-404 lab row with `REF01` (subject not in demographics). The cause was in the mock package: its lab spreadsheet still carried RESP-303 subject IDs. The same was true of NEURO-505 and IMMUNO-606. The quarantine design surfaced the defect instead of silently dropping 3,808 rows. The three packages were re-keyed, and the live DERM-404 onboarding above uses the fixed package.
+
+
+## Visibility and fallbacks (2026-11-26)
+
+The data is synthetic and the AI data modelling step is a mock: the validator and the accuracy maths are real, and the proposed mapping comes from a scenario (`pass`, `recover`, `fail`). Alerts go to the user who deployed (the address is a deploy variable, not stored in the repo).
+
+| Scenario | What happened | Evidence |
+|---|---|---|
+| `pass` (NEURO-505, IMMUNO-606) | Attempt 1 at 100%, gate passes, the pipeline, threshold check, insights and publish run; `manual_modelling_handoff` is skipped | job runs `97107776281824`, `444387311223696`, `597690362808408` |
+| `recover` (NEURO-505) | 98.881%, then 99.056%, then 100% on the third attempt; gate passes | job run `601185859125141`, [`query_results/ai_modelling_runs.csv`](query_results/ai_modelling_runs.csv) |
+| `fail` (IMMUNO-606) | 99.553% on every attempt (1 try plus 3 retries); the gate sends the run to `manual_modelling_handoff`, which succeeds (its success email is configured for the alert recipient; delivery was not checked here); the pipeline, insights and publish are skipped (the job result is `SUCCESS`, the app shows "Awaiting manual modelling") | job run `799479514420692` |
+| Manual fallback | `manual-data-modelling` applies the approved mapping, runs the pipeline, threshold check, insights and publish; recorded as actor `human` | job run `429504701985912` |
+| Threshold status | 5 of 6 studies critical (27.3 to 28.8% of subjects quarantined against a critical limit of 25), ONC-101 warn | [`query_results/dq_threshold_status.csv`](query_results/dq_threshold_status.csv), [`query_results/dq_study_status.csv`](query_results/dq_study_status.csv), [`query_results/dq_run_history.csv`](query_results/dq_run_history.csv) |
+| SQL alert `dq_critical_alert` | Evaluated every 15 minutes, state `TRIGGERED` (critical studies > 0), with the alert recipient as subscriber (delivery was not checked here) | alert `679146278986661` |
+| Dashboard `Study Hub - data quality` | Deployed and published; all 7 dataset queries return rows | dashboard `01f1e9ac1c061f48a4c76ee562321406` |
+| Remediation | Two accepted reviews (ONC-101, rule DM01) became waivers; `quarantine-remediation` returned them to Gold: clean 97 to 99, quarantined 27 to 25, 0 unbalanced domains | job run `1115261776312950`, [`query_results/dq_waivers.csv`](query_results/dq_waivers.csv), [`query_results/dq_remediation_log.csv`](query_results/dq_remediation_log.csv) |
+| `scripts/verify_dq.sql` | 8 of 8 checks at zero failures (two new: waived issues are not quarantined, threshold statuses are known) | [`query_results/verify_dq.csv`](query_results/verify_dq.csv) |
+
+### Issues found during the run
+
+- A job run started from a notebook could not import `src/lib/modelling.py` (`ModuleNotFoundError`): the notebook path is absolute, so joining it to `/Workspace` dropped the prefix. Fixed, and the AI task is set to `max_retries: 0` because serverless otherwise retried the task by itself on top of the notebook's own attempts.
+- The app failed to start with `Unknown job "default"`: AppKit only auto-discovers `DATABRICKS_JOB_ID` when no other job is bound. `server.ts` now names both jobs.
+- The IMMUNO-606 and NEURO-505 packages in the `samples` volume were the older copies whose lab spreadsheets carried RESP-303 subject IDs (see the previous section). A first threshold run showed it as a `top_rule_share_pct` of 676.9 (every lab row quarantined). The volume was refreshed from `demo_assets/`, and both studies now match DERM-404 (88 received, 64 clean, 24 quarantined).
+- The dashboard's remediation dataset failed until `dq_remediation_log` existed, so the staging task now creates it.

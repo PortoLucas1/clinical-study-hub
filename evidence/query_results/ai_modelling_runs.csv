@@ -1,0 +1,13 @@
+submission_id,study_id,attempt,actor,scenario,accuracy_pct,threshold_pct,values_checked,values_wrong,wrong_columns,outcome
+dq-test-fail-1,IMMUNO-606,1,ai,fail,99.553,99.9,50433,225,ae.BODY_SYSTEM,retry
+dq-test-fail-1,IMMUNO-606,2,ai,fail,99.553,99.9,50433,225,ae.BODY_SYSTEM,retry
+dq-test-fail-1,IMMUNO-606,3,ai,fail,99.553,99.9,50433,225,ae.BODY_SYSTEM,retry
+dq-test-fail-1,IMMUNO-606,4,ai,fail,99.553,99.9,50433,225,ae.BODY_SYSTEM,fail
+dq-test-fail-1,IMMUNO-606,5,system,,99.553,99.9,0,0,ae.BODY_SYSTEM,awaiting_manual_modelling
+dq-test-fail-1,IMMUNO-606,0,human,,100.0,0.0,50433,0,,human_approved
+dq-test-immuno-2,IMMUNO-606,1,ai,pass,100.0,99.9,50433,0,,pass
+dq-test-neuro-2,NEURO-505,1,ai,pass,100.0,99.9,50433,0,,pass
+dq-test-pass-2,NEURO-505,1,ai,pass,100.0,99.9,50433,0,,pass
+dq-test-recover-1,NEURO-505,1,ai,recover,98.881,99.9,50433,564,"ex.DOSE_UNIT, sv.VISIT",retry
+dq-test-recover-1,NEURO-505,2,ai,recover,99.056,99.9,50433,476,sv.VISIT,retry
+dq-test-recover-1,NEURO-505,3,ai,recover,100.0,99.9,50433,0,,pass

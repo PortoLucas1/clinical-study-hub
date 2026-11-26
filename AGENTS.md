@@ -22,6 +22,7 @@ Ask one question at a time when possible:
 | Catalog | `clinical_demo` | Created or used for demo tables and volumes |
 | Schema | `study_onboarding` | Under that catalog |
 | LLM endpoint | `databricks-claude-sonnet-4-5` | For AI study insights (`ai_query`) |
+| Alert email | the user running the deploy | Job failure, long run and data quality alerts go here. Pass at deploy; never commit it. |
 | Create Lakebase project? | yes | Holds approval state and the portfolio synced table |
 | Create Genie space? | yes | Needed for Ask Genie in the app |
 | Deploy the app? | yes | Study Hub UI |
@@ -52,13 +53,15 @@ From the **repo root** of the Git Folder (the directory that contains `databrick
 
 databricks bundle deploy -t dev \
   --var="catalog=<CATALOG>" --var="schema=<SCHEMA>" \
-  --var="warehouse_id=<WAREHOUSE_ID>" --var="llm_endpoint=<LLM_ENDPOINT>"
+  --var="warehouse_id=<WAREHOUSE_ID>" --var="llm_endpoint=<LLM_ENDPOINT>" \
+ --var="alert_email=<ALERT_EMAIL>"
 
 cd app/study-hub
 databricks bundle deploy \
   --var="sql_warehouse_id=<WAREHOUSE_ID>" \
   --var="files_id=<CATALOG>.<SCHEMA>.landing" \
   --var="job_id=<JOB_ID>" \
+ --var="manual_job_id=<MANUAL_JOB_ID>" \
   --var="genie_space_id=<GENIE_SPACE_ID>"
 databricks bundle run app
 ```
@@ -66,6 +69,8 @@ databricks bundle run app
 4. Tell the user the **App URL**, the catalog and schema, the job name, the Lakebase synced table, and the Genie space name.
 5. Demo tip: warm the SQL warehouse, then open the app and use `demo_assets/RESP-303_study_package.zip` for a live onboarding run (or `demo_assets/DERM-404_study_package.zip` if RESP-303 is already published). After it publishes, open the study's **Quarantine** tab to show coverage, reconciliation and the review flow.
 6. Optional checks: `scripts/verify_dq.sql` (every row `failures = 0`) and `scripts/genie_eval.py` (no quarantined subject in Genie answers).
+
+Demo tip 2 (fallbacks): on the Approvals page choose the AI modelling simulation before approving. **Recover** retries and passes, **Fail** hands off to a person (email, then "Start manual modelling" runs the `manual-data-modelling` job). The `Study Hub - data quality` dashboard and the `dq_critical_alert` SQL alert show threshold status. After a data manager accepts quarantined issues, run the `quarantine-remediation` job with that `study_id`.
 
 Upgrading an install that predates quarantine-first data quality: the `study_portfolio` table gains coverage columns, so delete the Lakebase synced table (`databricks postgres delete-synced-table synced_tables/study_hub_lakebase.serving.study_portfolio`) and re-run `00_install.py`, which recreates it and re-applies the `serving` grants. Until then the portfolio page falls back to the SQL warehouse.
 

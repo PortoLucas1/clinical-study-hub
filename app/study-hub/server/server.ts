@@ -11,7 +11,8 @@ createApp({
     analytics(),
     files({ volumes: { files: { maxUploadSize: 500 * 1024 * 1024, policy: landingPolicy } } }),
     genie(),
-    jobs(),
+    // "default" is DATABRICKS_JOB_ID (onboarding). It is only auto-discovered when no other job is bound, so name both.
+    jobs({ jobs: { default: {}, manual_modelling: {} } }),
     lakebase(),
     server(),
   ],

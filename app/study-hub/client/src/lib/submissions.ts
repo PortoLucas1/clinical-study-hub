@@ -1,7 +1,21 @@
 import { useCallback, useEffect, useState } from 'react';
 import { usePersona } from './persona';
 
-export type SubmissionStatus = 'UPLOADING' | 'PENDING_APPROVAL' | 'REJECTED' | 'PROCESSING' | 'PUBLISHED' | 'FAILED';
+export type SubmissionStatus =
+  | 'UPLOADING'
+  | 'PENDING_APPROVAL'
+  | 'REJECTED'
+  | 'PROCESSING'
+  | 'PUBLISHED'
+  | 'AWAITING_MANUAL_MODELLING'
+  | 'FAILED';
+
+export type AiScenario = 'pass' | 'recover' | 'fail';
+export const AI_SCENARIO_LABEL: Record<AiScenario, string> = {
+  pass: 'Normal: AI accuracy meets the threshold',
+  recover: 'Recover: below threshold, fixed on retry 2',
+  fail: 'Fail: below threshold after 3 retries, manual fallback',
+};
 
 export interface ManifestEntry {
   path: string;

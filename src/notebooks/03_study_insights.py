@@ -34,6 +34,9 @@ if not re.fullmatch(r"[A-Za-z0-9\-]+", endpoint):
     raise ValueError(f"Invalid endpoint name: {endpoint}")
 
 fq = f"{catalog}.{schema}"
+if not submission_id:  # started by the remediation job: use the study's current submission
+    latest = spark.sql(f"SELECT latest_submission_id FROM {fq}.study_registry WHERE study_id = :s", args={"s": study_id}).first()
+    submission_id = (latest[0] if latest else "") or ""
 print(f"Generating insights for {study_id} with {endpoint}")
 
 # COMMAND ----------

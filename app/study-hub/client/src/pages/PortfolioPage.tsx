@@ -21,6 +21,7 @@ import {
   LoadingBlock,
   PipelineProgress,
   StatusBadge,
+  ThresholdBadge,
 } from '../components/common';
 import { coverageLabel } from '../lib/quality';
 import { useSubmissions } from '../lib/submissions';
@@ -43,7 +44,11 @@ export function PortfolioPage() {
   const data = lakebaseRows ?? sqlData;
   const loading = sqlLoading && !lakebaseRows;
   const { submissions } = useSubmissions();
-  const inFlight = submissions.filter((s) => s.status === 'PENDING_APPROVAL' || s.status === 'PROCESSING');
+  const inFlight = submissions.filter(
+    (s) => s.status === 'PENDING_APPROVAL' || s.status === 'PROCESSING' || s.status === 'AWAITING_MANUAL_MODELLING'
+  );
+  const dqStatus = useAnalyticsQuery('dq_study_status', null);
+  const dqByStudy = new Map((dqStatus.data ?? []).map((r) => [String(r.study_id), r]));
 
   const studies = data ?? [];
   const totalEnrolled = studies.reduce((a, s) => a + Number(s.enrolled ?? 0), 0);
@@ -135,6 +140,10 @@ export function PortfolioPage() {
                 </div>
                 {s.status === 'PROCESSING' ? (
                   <PipelineProgress tasks={s.run_tasks} status={s.status} />
+                ) : s.status === 'AWAITING_MANUAL_MODELLING' ? (
+                  <Link to="/approvals" className="text-xs text-primary hover:underline">
+                    AI modelling below threshold: open the approval queue
+                  </Link>
                 ) : (
                   <span className="text-xs text-muted-foreground">Awaiting Admin approval</span>
                 )}
@@ -165,7 +174,15 @@ export function PortfolioPage() {
                   <Badge variant="secondary">{s.therapeutic_area}</Badge>
                   <Badge variant="outline">{s.phase}</Badge>
                 </div>
-                <CardTitle className="mt-2 text-lg">{s.study_id}</CardTitle>
+                <CardTitle className="mt-2 flex items-center gap-2 text-lg">
+                  {s.study_id}
+                  {dqByStudy.has(String(s.study_id)) && (
+                    <ThresholdBadge
+                      status={dqByStudy.get(String(s.study_id))?.status}
+                      title={String(dqByStudy.get(String(s.study_id))?.breaches ?? '') || 'All data quality metrics are within thresholds'}
+                    />
+                  )}
+                </CardTitle>
                 <CardDescription className="line-clamp-2">{s.title}</CardDescription>
               </CardHeader>
               <CardContent className="flex-1 space-y-4">

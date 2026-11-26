@@ -53,6 +53,33 @@ declare module "@databricks/appkit-ui/react" {
           serious_events: number;
         }>;
       };
+    ai_modelling: {
+        name: "ai_modelling";
+        parameters: {
+          /** STRING - use sql.string() */
+          submission_id: SQLStringMarker;
+        };
+        result: Array<{
+          /** @sqlType INT */
+          attempt: number;
+          /** @sqlType STRING */
+          actor: string;
+          /** @sqlType STRING */
+          scenario: string;
+          /** @sqlType DOUBLE */
+          accuracy_pct: number;
+          /** @sqlType DOUBLE */
+          threshold_pct: number;
+          /** @sqlType STRING */
+          outcome: string;
+          /** @sqlType STRING */
+          wrong_columns: string;
+          /** @sqlType STRING */
+          feedback: string;
+          /** @sqlType STRING */
+          recorded_at: string;
+        }>;
+      };
     disposition: {
         name: "disposition";
         parameters: {
@@ -135,6 +162,18 @@ declare module "@databricks/appkit-ui/react" {
           balanced: boolean;
         }>;
       };
+    dq_study_status: {
+        name: "dq_study_status";
+        parameters: Record<string, never>;
+        result: Array<{
+          /** @sqlType STRING */
+          study_id: string;
+          /** @sqlType STRING */
+          status: string;
+          /** @sqlType STRING */
+          breaches: string;
+        }>;
+      };
     dq_summary: {
         name: "dq_summary";
         parameters: {
@@ -158,6 +197,27 @@ declare module "@databricks/appkit-ui/react" {
           subjects_affected: number;
           /** @sqlType BIGINT */
           sites_affected: number;
+        }>;
+      };
+    dq_threshold_status: {
+        name: "dq_threshold_status";
+        parameters: {
+          /** STRING - use sql.string() */
+          study_id: SQLStringMarker;
+        };
+        result: Array<{
+          /** @sqlType STRING */
+          metric: string;
+          /** @sqlType DOUBLE */
+          value: number;
+          /** @sqlType DOUBLE */
+          warn: number;
+          /** @sqlType DOUBLE */
+          critical: number;
+          /** @sqlType STRING */
+          status: string;
+          /** @sqlType STRING */
+          description: string;
         }>;
       };
     enrollment_by_month: {

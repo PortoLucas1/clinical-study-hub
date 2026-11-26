@@ -18,6 +18,9 @@ from pyspark.sql import functions as F
 
 from dq_rules import OBSERVE, QUARANTINE, SUBJECT_DOMAINS, expectations, issues_sql
 
+CATALOG = spark.conf.get("dq.catalog")
+SCHEMA = spark.conf.get("dq.schema")
+
 VISIT_ORDER = {"SCREENING": 0, "BASELINE": 1, "WEEK 4": 2, "WEEK 8": 3, "WEEK 12": 4, "WEEK 24": 5}
 
 CHECK_COLUMNS = ["quarantine_issues", "observed_issues", "failed_rules", "is_record_valid"]
@@ -78,10 +81,28 @@ def latest(table: str, with_cutoff: bool = True) -> DataFrame:
     return spark.read.table(table).join(keys, ["study_id", "submission_id"])
 
 
-def checked(df: DataFrame, domain: str) -> DataFrame:
+def waived_rules(domain: str) -> DataFrame:
+    """Rules a data manager accepted for a subject (dq_waivers, written by the quarantine_remediation job).
+
+    A waiver is tied to the submission it was accepted for, so a resubmitted package is reviewed again."""
     return (
-        df.withColumn("quarantine_issues", F.expr(issues_sql(domain, QUARANTINE)))
-        .withColumn("observed_issues", F.expr(issues_sql(domain, OBSERVE)))
+        spark.read.table(f"{CATALOG}.{SCHEMA}.dq_waivers")
+        .filter(F.col("domain") == domain.upper())
+        .groupBy("study_id", "submission_id", "usubjid")
+        .agg(F.collect_set("rule_id").alias("waived_rules"))
+    )
+
+
+def checked(df: DataFrame, domain: str) -> DataFrame:
+    out = df.withColumn("quarantine_issues", F.expr(issues_sql(domain, QUARANTINE)))
+    if domain != "study":
+        # Accepted issues stay auditable in dq_waivers and no longer quarantine the record.
+        out = out.join(waived_rules(domain), ["study_id", "submission_id", "usubjid"], "left").withColumn(
+            "quarantine_issues",
+            F.expr("filter(quarantine_issues, x -> NOT array_contains(coalesce(waived_rules, array()), x.rule_id))"),
+        ).drop("waived_rules")
+    return (
+        out.withColumn("observed_issues", F.expr(issues_sql(domain, OBSERVE)))
         .withColumn("failed_rules", F.expr("transform(quarantine_issues, x -> x.rule_id)"))
         .withColumn("is_record_valid", F.expr("size(quarantine_issues) = 0"))
     )
