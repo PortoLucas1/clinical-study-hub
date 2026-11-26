@@ -1,0 +1,82 @@
+{
+  "space_id": "01f1e8f14e48158f971d172374654eba",
+  "quarantined_subjects": 143,
+  "results": [
+    {
+      "question": "List subjects with grade 3 or higher adverse events",
+      "status": "COMPLETED",
+      "leaked_usubjids": [],
+      "rows_returned": 161,
+      "sql": [
+        "SELECT `study_id`, `usubjid`, `site_id`, `country`, `arm`, `sex`, `age`, `max_ae_grade`, `ae_count`, `sae_count`, `related_ae_count` FROM `<catalog>`.`study_onboarding`.`gold_patient_profile` WHERE `max_ae_grade` IS NOT NULL AND `max_ae_grade` >= 3 ORDER BY `study_id`, `usubjid`"
+      ],
+      "answer": "You want to see a list of subjects who have experienced adverse events with a severity grade of 3 or higher. The list includes details such as study ID, subject ID, site, country, treatment arm, sex, age, maximum adverse event grade, and counts of adverse events, serious adverse events, and related adverse events.\nExamples of subjects with **grade 3 or higher** adverse events include:\n- **CARD-202-101-0019** \u2014 max AE grade **3**, arm **Placebo**, site **101**, country **USA**\n- **CARD-202-101-0024** \u2014 max AE grade **4**, arm **CRD-7 10 mg**, site **101**, country **USA**\n- **CARD-202-101-0036** \u2014 max AE grade **3**, arm **CRD-7 10 mg**, site **101**, country **USA**\n- **CARD-202-101-0078** \u2014 max AE grade **3**, arm **CRD-7 10 mg**, site **101**, country **USA**\n- **CARD-202-101-0079** \u2014 max AE grade **3**, arm **Placebo**, site **101**, country **USA**"
+    },
+    {
+      "question": "List every subject in ONC-101 with their age and arm",
+      "status": "COMPLETED",
+      "leaked_usubjids": [],
+      "rows_returned": 97,
+      "sql": [
+        "SELECT p.`usubjid`, p.`age`, p.`arm`, o.`subjects_clean`, o.`subjects_received`, o.`subjects_quarantined`\nFROM `<catalog>`.`study_onboarding`.`gold_patient_profile` p\nCROSS JOIN (\n  SELECT `subjects_clean`, `subjects_received`, `subjects_quarantined`\n  FROM `<catalog>`.`study_onboarding`.`gold_study_overview`\n  WHERE `study_id` = 'ONC-101'\n) o\nWHERE p.`study_id` = 'ONC-101'\nORDER BY p.`usubjid`"
+      ],
+      "answer": "You want to see a list of all subjects in the ONC-101 study along with their age and treatment arm. Additionally, you want to know the total number of clean subjects, subjects received, and subjects quarantined in the study for context.\nExamples include:\n- **ONC-101-101-0004** \u2014 age **46**, arm **SMX-401 200 mg**\n- **ONC-101-101-0008** \u2014 age **75**, arm **SMX-401 200 mg**\n- **ONC-101-101-0016** \u2014 age **57**, arm **SMX-401 200 mg**\n- **ONC-101-101-0020** \u2014 age **43**, arm **SMX-401 200 mg**\n- **ONC-101-101-0030** \u2014 age **67**, arm **SMX-401 200 mg**"
+    },
+    {
+      "question": "Which subjects have the highest ALT values?",
+      "status": "COMPLETED",
+      "leaked_usubjids": [],
+      "rows_returned": 4,
+      "sql": [
+        "WITH `subject_alt` AS (\n  SELECT\n    `study_id`,\n    `usubjid`,\n    MAX(`lbstresn`) AS `highest_alt`\n  FROM `<catalog>`.`study_onboarding`.`silver_lb`\n  WHERE `lbtestcd` = 'ALT'\n    AND `study_id` IS NOT NULL\n    AND `usubjid` IS NOT NULL\n    AND `lbstresn` IS NOT NULL\n  GROUP BY `study_id`, `usubjid`\n), `ranked_alt` AS (\n  SELECT\n    `study_id`,\n    `usubjid`,\n    `highest_alt`,\n    RANK() OVER (PARTITION BY `study_id` ORDER BY `highest_alt` DESC) AS `alt_rank`\n  FROM `subject_alt`\n)\nSELECT\n  `study_id`,\n  `usubjid`,\n  `highest_alt`\nFROM `ranked_alt`\nWHERE `alt_rank` = 1\nORDER BY `study_id`, `usubjid`"
+      ],
+      "answer": "You want to see the subjects with the highest ALT lab values for each study.\nThe subjects with the **highest ALT value** in each study are:\n- **CARD-202:** **CARD-202-101-0093** with **62.79**\n- **DERM-404:** **DERM-404-106-0016** with **52.13**\n- **ONC-101:** **ONC-101-107-0118** with **112.82**\n- **RESP-303:** **RESP-303-106-0016** with **52.13**\nAcross the 4 studies returned, **ONC-101-107-0118** has the highest ALT overall at **112.82**, while **DERM-404** and **RESP-303** are tied at **52.13**."
+    },
+    {
+      "question": "Which subjects have implausible vital signs?",
+      "status": "COMPLETED",
+      "leaked_usubjids": [],
+      "rows_returned": 0,
+      "sql": [],
+      "answer": "Implausible vital sign records are not available in this clean-data space; they were quarantined by rule `VS01` and reviewed in the Study Hub app. If you want, I can return counts of `VS01` issues by study from the available data."
+    },
+    {
+      "question": "Show me the quarantined subjects and why they were quarantined",
+      "status": "COMPLETED",
+      "leaked_usubjids": [],
+      "rows_returned": 0,
+      "sql": [],
+      "answer": "I can\u2019t fetch quarantined subject-level records here because this space only contains clean subjects plus summary quarantine counts; quarantined data is reviewed in the Study Hub app.  \nIf helpful, I can return the available summary counts of quarantined subjects and related data quality issues by study or site."
+    },
+    {
+      "question": "How many subjects are enrolled in each study?",
+      "status": "COMPLETED",
+      "leaked_usubjids": [],
+      "rows_returned": 4,
+      "sql": [
+        "SELECT `study_id`, `enrolled`, `planned_enrollment`, `pct_enrollment_target`, `subjects_received`, `subjects_quarantined` FROM `<catalog>`.`study_onboarding`.`gold_study_overview` WHERE `study_id` IS NOT NULL ORDER BY `study_id`"
+      ],
+      "answer": "You want to see the number of subjects enrolled in each study along with the planned enrollment, percentage of enrollment target achieved, and counts of subjects received and quarantined.\nEnrollment by study is:\n- **CARD-202:** **168** enrolled\n- **DERM-404:** **64** enrolled\n- **ONC-101:** **97** enrolled\n- **RESP-303:** **64** enrolled\nAcross the 4 studies shown, **CARD-202** has the highest enrollment and **DERM-404** and **RESP-303** are tied for the lowest."
+    },
+    {
+      "question": "What is the SAE rate by treatment arm?",
+      "status": "COMPLETED",
+      "leaked_usubjids": [],
+      "rows_returned": 8,
+      "sql": [
+        "SELECT `study_id`, `arm`, `subjects_in_arm`, `subjects_with_sae`, `pct_with_sae` FROM `<catalog>`.`study_onboarding`.`gold_ae_by_arm` WHERE `arm` IS NOT NULL ORDER BY `study_id`, `arm`"
+      ],
+      "answer": "You want to see the rate of serious adverse events (SAEs) for each treatment arm in the study, including the number of subjects in each arm and how many of them experienced SAEs.\nExamples include:\n- **CARD-202**: **CRD-7 10 mg** had an SAE rate of **39.8%** (33 of 83) vs **14.1%** for **Placebo** (12 of 85).\n- **DERM-404**: **RSP-12 100 mcg** had an SAE rate of **35.5%** (11 of 31) vs **18.2%** for **Placebo** (6 of 33).\n- **ONC-101**: **SMX-401 200 mg** had an SAE rate of **30.4%** (14 of 46) vs **17.6%** for **Docetaxel 75 mg/m2** (9 of 51).\n- **RESP-303**: **RSP-12 100 mcg** had an SAE rate of **35.5%** (11 of 31) vs **18.2%** for **Placebo** (6 of 33).\nAcross all 8 rows shown, the active treatment arm has a higher SAE rate than the comparator arm in each study."
+    },
+    {
+      "question": "Which subjects had adverse events before randomization?",
+      "status": "COMPLETED",
+      "leaked_usubjids": [],
+      "rows_returned": 0,
+      "sql": [
+        "SELECT `dq`.`study_id`, `dq`.`domain`, `dq`.`rule_id`, `dq`.`rule_description`, `dq`.`severity`, `dq`.`action`, `dq`.`issue_count`, `dq`.`subjects_affected`, `so`.`subjects_clean`, `so`.`subjects_received`, `so`.`subjects_quarantined` FROM `<catalog>`.`study_onboarding`.`gold_dq_summary` AS `dq` INNER JOIN `<catalog>`.`study_onboarding`.`gold_study_overview` AS `so` ON `dq`.`study_id` = `so`.`study_id` WHERE `dq`.`domain` = 'AE' AND lower(`dq`.`action`) = 'observe' AND (lower(`dq`.`rule_description`) LIKE '%randomization%' OR (lower(`dq`.`rule_description`) LIKE '%before%' AND lower(`dq`.`rule_description`) LIKE '%random%') OR (lower(`dq`.`rule_description`) LIKE '%adverse event%' AND lower(`dq`.`rule_description`) LIKE '%before%')) ORDER BY `dq`.`study_id`, `dq`.`issue_count` DESC"
+      ],
+      "answer": "You want to see data quality issues related to adverse events that occurred before randomization, including the number of affected subjects and issue counts, along with study-level subject counts and quarantine status.\nI could not identify any subjects with adverse events before randomization from the data returned here, because the result contains **0 rows**. In this dataset, there are **no AE data quality records** matching an observed rule description related to events before randomization.\nWould you like to see subjects with adverse events before randomization broken down by study or by severity of the events instead?"
+    }
+  ]
+}

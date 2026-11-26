@@ -1,9 +1,11 @@
--- Gold: study insight marts consumed by the Study Hub app and the Genie agent.
+-- Gold: study insight marts consumed by the Study Hub app, the Genie agent and the AI insights.
+-- They read only the clean Silver tables, so every KPI covers clean subjects; quarantined records
+-- stay in silver_*_quarantine and the data quality tables (dq.py).
 -- Every table keeps study_id (plus arm / site / visit where relevant) so the app and
 -- Genie can slice any study without re-aggregating.
 
 CREATE OR REFRESH MATERIALIZED VIEW gold_patient_profile
-COMMENT "One row per subject: demographics, disposition, exposure, safety and visit summary"
+COMMENT "One row per clean subject: demographics, disposition, exposure, safety and visit summary"
 TBLPROPERTIES ("quality" = "gold")
 AS
 WITH ae AS (
@@ -46,61 +48,8 @@ LEFT JOIN ae ON ae.study_id = dm.study_id AND ae.usubjid = dm.usubjid
 LEFT JOIN lb ON lb.study_id = dm.study_id AND lb.usubjid = dm.usubjid
 LEFT JOIN sv ON sv.study_id = dm.study_id AND sv.usubjid = dm.usubjid;
 
-CREATE OR REFRESH MATERIALIZED VIEW gold_dq_issues
-COMMENT "Data quality: one row per detected data issue (rule, subject, site, detail)"
-TBLPROPERTIES ("quality" = "gold")
-AS
-SELECT study_id, 'DM' AS domain, 'DM01' AS rule_id, 'Age outside protocol range (18-100)' AS rule_description,
-       'High' AS severity, usubjid, siteid AS site_id, concat('AGE=', coalesce(cast(age AS STRING), 'missing')) AS detail
-FROM silver_dm WHERE age IS NULL OR age NOT BETWEEN 18 AND 100
-UNION ALL
-SELECT study_id, 'DM', 'DM02', 'Informed consent date missing', 'High', usubjid, siteid, 'RFICDTC is null'
-FROM silver_dm WHERE rficdtc IS NULL
-UNION ALL
-SELECT ae.study_id, 'AE', 'AE01', 'AE end date before onset date', 'Medium', ae.usubjid, dm.siteid,
-       concat(ae.aeterm, ': onset ', ae.aestdtc, ', end ', ae.aeendtc)
-FROM silver_ae ae LEFT JOIN silver_dm dm USING (study_id, usubjid)
-WHERE ae.aeendtc < ae.aestdtc
-UNION ALL
-SELECT ae.study_id, 'AE', 'AE02', 'AE onset before randomization', 'Low', ae.usubjid, dm.siteid,
-       concat(ae.aeterm, ': onset ', ae.aestdtc, ', randomized ', dm.randdt)
-FROM silver_ae ae JOIN silver_dm dm USING (study_id, usubjid)
-WHERE ae.aestdtc < dm.randdt
-UNION ALL
-SELECT lb.study_id, 'LB', 'LB01', 'Lab result not numeric or missing', 'Medium', lb.usubjid, dm.siteid,
-       concat(lb.lbtestcd, ' at ', lb.visit, ': "', coalesce(lb.lborres, ''), '"')
-FROM silver_lb lb LEFT JOIN silver_dm dm USING (study_id, usubjid)
-WHERE lb.lbstresn IS NULL
-UNION ALL
-SELECT vs.study_id, 'VS', 'VS01', 'Vital sign physiologically implausible', 'High', vs.usubjid, dm.siteid,
-       concat(vs.vstestcd, '=', vs.vsorres, ' ', vs.vsstresu, ' at ', vs.visit)
-FROM silver_vs vs LEFT JOIN silver_dm dm USING (study_id, usubjid)
-WHERE NOT (CASE vs.vstestcd
-             WHEN 'SYSBP' THEN vs.vsstresn BETWEEN 60 AND 250
-             WHEN 'DIABP' THEN vs.vsstresn BETWEEN 30 AND 150
-             WHEN 'HR' THEN vs.vsstresn BETWEEN 30 AND 220
-             WHEN 'TEMP' THEN vs.vsstresn BETWEEN 33 AND 42
-             WHEN 'WEIGHT' THEN vs.vsstresn BETWEEN 25 AND 300
-             ELSE TRUE END)
-UNION ALL
-SELECT sv.study_id, 'SV', 'SV01', 'Visit outside protocol window (+/- 7 days)', 'Low', sv.usubjid, dm.siteid,
-       concat(sv.visit, ': ', sv.days_from_planned, ' days from planned')
-FROM silver_sv sv LEFT JOIN silver_dm dm USING (study_id, usubjid)
-WHERE abs(sv.days_from_planned) > 7;
-
-CREATE OR REFRESH MATERIALIZED VIEW gold_dq_summary
-COMMENT "Data quality summary: issue counts by study, domain and rule"
-TBLPROPERTIES ("quality" = "gold")
-AS
-SELECT study_id, domain, rule_id, rule_description, severity,
-       count(*) AS issue_count,
-       count(DISTINCT usubjid) AS subjects_affected,
-       count(DISTINCT site_id) AS sites_affected
-FROM gold_dq_issues
-GROUP BY study_id, domain, rule_id, rule_description, severity;
-
 CREATE OR REFRESH MATERIALIZED VIEW gold_study_overview
-COMMENT "One row per study: protocol info, enrollment vs plan, disposition, safety and data quality KPIs"
+COMMENT "One row per study: protocol info, enrollment vs plan, disposition and safety KPIs on clean subjects, with data quality coverage (received, clean and quarantined subjects)"
 TBLPROPERTIES ("quality" = "gold")
 AS
 WITH dm AS (
@@ -124,6 +73,11 @@ ae AS (
 dq AS (
   SELECT study_id, count(*) AS dq_issues, count_if(severity = 'High') AS dq_high_issues
   FROM gold_dq_issues GROUP BY study_id
+),
+cov AS (
+  SELECT study_id, subjects_received, subjects_clean, subjects_quarantined, pct_subjects_clean,
+         records_received, records_quarantined
+  FROM dq_study_coverage
 )
 SELECT
   s.study_id, s.nct_id, s.title, s.phase, s.indication, s.therapeutic_area, s.sponsor,
@@ -135,12 +89,19 @@ SELECT
   round(100.0 * ds.discontinued / nullif(dm.enrolled, 0), 1) AS discontinuation_rate_pct,
   ae.total_aes, ae.subjects_with_ae, ae.total_saes, ae.subjects_with_sae, ae.grade3plus_aes, ae.fatal_aes,
   round(100.0 * ae.subjects_with_sae / nullif(dm.enrolled, 0), 1) AS sae_subject_rate_pct,
-  coalesce(dq.dq_issues, 0) AS dq_issues, coalesce(dq.dq_high_issues, 0) AS dq_high_issues
+  coalesce(dq.dq_issues, 0) AS dq_issues, coalesce(dq.dq_high_issues, 0) AS dq_high_issues,
+  coalesce(cov.subjects_received, 0) AS subjects_received,
+  coalesce(cov.subjects_clean, 0) AS subjects_clean,
+  coalesce(cov.subjects_quarantined, 0) AS subjects_quarantined,
+  cov.pct_subjects_clean,
+  coalesce(cov.records_received, 0) AS records_received,
+  coalesce(cov.records_quarantined, 0) AS records_quarantined
 FROM silver_study s
 LEFT JOIN dm USING (study_id)
 LEFT JOIN ds USING (study_id)
 LEFT JOIN ae USING (study_id)
-LEFT JOIN dq USING (study_id);
+LEFT JOIN dq USING (study_id)
+LEFT JOIN cov USING (study_id);
 
 CREATE OR REFRESH MATERIALIZED VIEW gold_enrollment_by_month
 COMMENT "Monthly enrollment (by consent date) per study and arm, with cumulative totals"
@@ -155,12 +116,18 @@ SELECT study_id, arm, enroll_month, new_subjects,
 FROM m;
 
 CREATE OR REFRESH MATERIALIZED VIEW gold_site_performance
-COMMENT "Clinical operations view per site: enrollment, discontinuations, SAEs, visit compliance and data quality"
+COMMENT "Clinical operations view per site: enrollment, discontinuations, SAEs and visit compliance on clean subjects, plus data quality issue and quarantined subject counts"
 TBLPROPERTIES ("quality" = "gold")
 AS
-WITH dq AS (SELECT study_id, site_id, count(*) AS dq_issues FROM gold_dq_issues GROUP BY ALL)
+WITH dq AS (SELECT study_id, site_id, count(*) AS dq_issues FROM gold_dq_issues GROUP BY ALL),
+q AS (
+  SELECT study_id, site_id, count(*) AS subjects_received, count_if(NOT is_clean) AS subjects_quarantined
+  FROM silver_subject_status GROUP BY ALL
+)
 SELECT p.study_id, p.site_id, p.country,
        count(*) AS enrolled,
+       coalesce(max(q.subjects_received), 0) AS subjects_received,
+       coalesce(max(q.subjects_quarantined), 0) AS subjects_quarantined,
        count_if(p.disposition_status = 'DISCONTINUED') AS discontinued,
        round(100.0 * count_if(p.disposition_status = 'DISCONTINUED') / count(*), 1) AS discontinuation_rate_pct,
        sum(p.sae_count) AS saes,
@@ -170,6 +137,7 @@ SELECT p.study_id, p.site_id, p.country,
        coalesce(max(dq.dq_issues), 0) AS dq_issues
 FROM gold_patient_profile p
 LEFT JOIN dq ON dq.study_id = p.study_id AND dq.site_id = p.site_id
+LEFT JOIN q ON q.study_id = p.study_id AND q.site_id = p.site_id
 GROUP BY p.study_id, p.site_id, p.country;
 
 CREATE OR REFRESH MATERIALIZED VIEW gold_ae_summary
@@ -218,19 +186,11 @@ FROM silver_lb lb JOIN silver_dm dm USING (study_id, usubjid)
 GROUP BY lb.study_id, dm.arm, lb.lbtestcd, lb.visit, lb.visitnum;
 
 CREATE OR REFRESH MATERIALIZED VIEW gold_vitals_trends
-COMMENT "Mean vital signs by study, arm, test and visit (implausible values excluded)"
+COMMENT "Mean vital signs by study, arm, test and visit (clean subjects; implausible values are quarantined by rule VS01)"
 TBLPROPERTIES ("quality" = "gold")
 AS
 SELECT vs.study_id, dm.arm, vs.vstestcd AS vital_test, vs.visit, vs.visitnum, any_value(vs.vsstresu) AS unit,
        count(*) AS measurements,
        round(avg(vs.vsstresn), 1) AS mean_value
 FROM silver_vs vs JOIN silver_dm dm USING (study_id, usubjid)
-WHERE vs.vsstresn IS NOT NULL
-  AND (CASE vs.vstestcd
-         WHEN 'SYSBP' THEN vs.vsstresn BETWEEN 60 AND 250
-         WHEN 'DIABP' THEN vs.vsstresn BETWEEN 30 AND 150
-         WHEN 'HR' THEN vs.vsstresn BETWEEN 30 AND 220
-         WHEN 'TEMP' THEN vs.vsstresn BETWEEN 33 AND 42
-         WHEN 'WEIGHT' THEN vs.vsstresn BETWEEN 25 AND 300
-         ELSE TRUE END)
 GROUP BY vs.study_id, dm.arm, vs.vstestcd, vs.visit, vs.visitnum;

@@ -16,7 +16,9 @@ The data is synthetic. Sponsors are fictional (Synthetic Biopharma Inc., Synthet
 | Portfolio API served from Lakebase | `source: lakebase`, 3 rows | [`api/portfolio_response_summary.json`](api/portfolio_response_summary.json), [`query_results/lakebase_serving_study_portfolio.csv`](query_results/lakebase_serving_study_portfolio.csv) |
 | Genie space "Study Insights" | Created; 5 of 5 test questions answered, and the answers match the tables | [`genie_qa.md`](genie_qa.md) |
 | Study Hub app | `RUNNING`; last deployment `SUCCEEDED` | see "App" below |
-| Unit tests and typecheck | 3 of 3 tests pass; typecheck clean | [`tests.txt`](tests.txt) |
+| Quarantine-first data quality (2026-11-26) | Deployed; 6 of 6 checks at zero failures; every staged row reconciles; 143 subjects quarantined, none dropped | see "Quarantine-first data quality" below |
+| Genie contamination check | 8 of 8 probe questions: no quarantined subject in any answer | [`genie_eval.md`](genie_eval.md) |
+| Unit tests and typecheck | 6 of 6 app tests and 7 of 7 rules tests pass; typecheck clean; lint 0 errors | [`tests.txt`](tests.txt) |
 
 ## Timeline (UTC, 2026-11-25)
 
@@ -49,6 +51,8 @@ The data is synthetic. Sponsors are fictional (Synthetic Biopharma Inc., Synthet
 6. **Published.** Status `PUBLISHED`; run state `SUCCESS`.
 
 ### Portfolio after RESP-303
+
+This table is from the first run, before quarantine-first data quality. At that point KPIs counted every received subject. See "Quarantine-first data quality" below for the current, clean-only numbers.
 
 | Study | Phase | Planned | Enrolled | % of target | Sites | Countries | SAE subject rate % | DQ issues (high) |
 |---|---|---|---|---|---|---|---|---|
@@ -93,3 +97,41 @@ The install notebook went through several iterations before the final green run.
 - Printed in the run: `Bound app to catalog <catalog> in 17 files`, the three Unity Catalog `GRANT` statements, the three Lakebase `GRANT` statements, and `active app deployment: SUCCEEDED App started successfully`.
 - The seed studies were already present, so the notebook reported `ONC-101 already in gold_study_overview — skip job` and the same for CARD-202. This is the idempotent path.
 - The Lakebase catalog already existed, so the notebook reported `Catalog 'study_hub_lakebase' already exists` and continued. This is expected.
+
+## Quarantine-first data quality (2026-11-26)
+
+Same workspace, redeployed with the quarantine-first design: every record that fails a quarantine rule, and every record of its subject, moves to a `silver_<domain>_quarantine` table. No row is dropped. Gold, the AI insights, Genie and the portfolio read only clean subjects. The rules live in one registry (`src/pipeline/dq_rules.py`, 40 rules), published as the `dq_rules` table.
+
+### Steps
+
+| Step | Result | ID |
+|---|---|---|
+| Root bundle deploy and pipeline update (Lakeflow Declarative Pipelines) | `COMPLETED`; new tables `silver_*_quarantine`, `silver_subject_status`, `dq_rules`, `dq_study_coverage`, `dq_reconciliation`, event log published to Unity Catalog | pipeline update `6275f802-3428-423a-90b9-91f1d34aa8b3` |
+| AI insights for 4 studies, then publish | `SUCCESS`. The first attempt failed because the notebook required the staging task's value when run alone; fixed, then repaired | run `1086605723025120`, repair `76590853762191` |
+| Lakebase synced table | Recreated for the new coverage columns; app grants re-applied; `ONLINE` | `study_hub_lakebase.serving.study_portfolio` |
+| Genie space | Updated to clean tables only (`gold_dq_issues` and the AI summary removed) | space `01f1e8f14e48158f971d172374654eba` |
+| Study Hub app | Deployed; `App started successfully`; new Quarantine tab, coverage tiles, staging report, issue reviews (`study_hub.dq_issue_reviews` in Lakebase) | app `study-hub` |
+| Live onboarding DERM-404 through the app API | `PUBLISHED`; job run `SUCCESS` (4 of 4 tasks); staging report shows 8 files staged, none flagged | submission `SUB-20261126142546-HJ4D`, job run `341990709145072` |
+| Package check | An incomplete package (no adverse events or labs) is rejected by the server with `400 Package is missing required domain files: ae, lb` | |
+
+### Before and after (KPIs on clean subjects only)
+
+| Study | Enrolled before | Subjects received | Clean (KPIs) | Quarantined | % clean | Records quarantined |
+|---|---|---|---|---|---|---|
+| CARD-202 | 236 | 236 | 168 | 68 | 71.2 | 5,836 |
+| DERM-404 | not onboarded | 88 | 64 | 24 | 72.7 | 1,959 |
+| ONC-101 | 124 | 124 | 97 | 27 | 78.2 | 2,346 |
+| RESP-303 | 88 | 88 | 64 | 24 | 72.7 | 1,959 |
+
+Sources: [`query_results/dq_study_coverage.csv`](query_results/dq_study_coverage.csv), [`query_results/study_portfolio.csv`](query_results/study_portfolio.csv). The generator plants issues on purpose (implausible vitals, missing or non-numeric lab results, dates after the cutoff, missing consent dates, out-of-range ages, AEs ending before onset), so a large share of subjects is quarantined. DERM-404 is a re-keyed copy of RESP-303, which is why their numbers match.
+
+### Verification
+
+- [`scripts/verify_dq.sql`](../scripts/verify_dq.sql): 6 of 6 checks return zero failures ([`query_results/verify_dq.csv`](query_results/verify_dq.csv)). No quarantined or unknown subject appears in a clean Silver or Gold table, and `subjects_received = subjects_clean + subjects_quarantined`.
+- Reconciliation: for all 28 study and domain pairs, staged rows = Bronze rows = clean rows + quarantine rows ([`query_results/dq_reconciliation.csv`](query_results/dq_reconciliation.csv)). `dq_reconciliation` also carries a `rows_balanced` expectation, so an imbalance shows up in the pipeline event log.
+- AI insights: all 4 briefings pass output validation and state their coverage, for example "These metrics cover 97 clean subjects (78.2% of 124 received)" ([`query_results/study_ai_summary_validation.csv`](query_results/study_ai_summary_validation.csv)). The model receives data quality as counts only.
+- Genie: [`scripts/genie_eval.py`](../scripts/genie_eval.py) asked 8 probe questions, including "List every subject in ONC-101" (97 rows, the clean count) and "Show me the quarantined subjects". No answer contained any of the 143 quarantined subject IDs. Genie declines to list quarantined subjects and points to the app ([`genie_eval.md`](genie_eval.md)). Its text answers do not always restate coverage, but the result tables include the received and quarantined counts.
+
+### Issue found during the run
+
+The first validation run quarantined every DERM-404 lab row with `REF01` (subject not in demographics). The cause was in the mock package: its lab spreadsheet still carried RESP-303 subject IDs. The same was true of NEURO-505 and IMMUNO-606. The quarantine design surfaced the defect instead of silently dropping 3,808 rows. The three packages were re-keyed, and the live DERM-404 onboarding above uses the fixed package.

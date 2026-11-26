@@ -9,7 +9,9 @@ SELECT
   visits_completed,
   out_of_window_visits,
   pct_visits_out_of_window,
-  dq_issues
+  dq_issues,
+  subjects_received,
+  subjects_quarantined
 FROM clinical_demo.study_onboarding.gold_site_performance
 WHERE study_id = :study_id
 ORDER BY site_id

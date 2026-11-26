@@ -1,0 +1,5 @@
+study_id,subjects_received,subjects_clean,subjects_quarantined,records_received,records_quarantined,pct_subjects_clean
+CARD-202,236,168,68,19830,5836,71.2
+DERM-404,88,64,24,7153,1959,72.7
+ONC-101,124,97,27,10474,2346,78.2
+RESP-303,88,64,24,7153,1959,72.7

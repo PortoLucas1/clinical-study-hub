@@ -64,7 +64,10 @@ databricks bundle run app
 ```
 
 4. Tell the user the **App URL**, the catalog and schema, the job name, the Lakebase synced table, and the Genie space name.
-5. Demo tip: warm the SQL warehouse, then open the app and use `demo_assets/RESP-303_study_package.zip` for a live onboarding run.
+5. Demo tip: warm the SQL warehouse, then open the app and use `demo_assets/RESP-303_study_package.zip` for a live onboarding run (or `demo_assets/DERM-404_study_package.zip` if RESP-303 is already published). After it publishes, open the study's **Quarantine** tab to show coverage, reconciliation and the review flow.
+6. Optional checks: `scripts/verify_dq.sql` (every row `failures = 0`) and `scripts/genie_eval.py` (no quarantined subject in Genie answers).
+
+Upgrading an install that predates quarantine-first data quality: the `study_portfolio` table gains coverage columns, so delete the Lakebase synced table (`databricks postgres delete-synced-table synced_tables/study_hub_lakebase.serving.study_portfolio`) and re-run `00_install.py`, which recreates it and re-applies the `serving` grants. Until then the portfolio page falls back to the SQL warehouse.
 
 ## Hard rules
 

@@ -44,11 +44,33 @@ CREATE TABLE IF NOT EXISTS {fq}.study_portfolio (
   dq_high_issues BIGINT,
   data_cutoff_date STRING,
   headline STRING,
-  insights_generated_at STRING
+  insights_generated_at STRING,
+  subjects_received BIGINT,
+  subjects_clean BIGINT,
+  subjects_quarantined BIGINT,
+  pct_subjects_clean DOUBLE,
+  records_quarantined BIGINT
 )
-COMMENT 'One row per published study: Gold KPIs plus the AI headline. Source for the Lakebase synced table that serves the Study Hub portfolio.'
+COMMENT 'One row per published study: Gold KPIs on clean subjects, data quality coverage and the AI headline. Source for the Lakebase synced table that serves the Study Hub portfolio.'
 TBLPROPERTIES (delta.enableChangeDataFeed = true)
 """)
+
+COVERAGE_COLUMNS = [
+    ("subjects_received", "BIGINT"),
+    ("subjects_clean", "BIGINT"),
+    ("subjects_quarantined", "BIGINT"),
+    ("pct_subjects_clean", "DOUBLE"),
+    ("records_quarantined", "BIGINT"),
+]
+existing = set(spark.table(f"{fq}.study_portfolio").columns)
+added = [c for c, _ in COVERAGE_COLUMNS if c not in existing]
+if added:
+    spark.sql(
+        f"ALTER TABLE {fq}.study_portfolio ADD COLUMNS ("
+        + ", ".join(f"{c} {t}" for c, t in COVERAGE_COLUMNS if c in added)
+        + ")"
+    )
+    print("Added coverage columns (recreate the Lakebase synced table to serve them):", added)
 
 spark.sql(f"""
 MERGE INTO {fq}.study_portfolio t
@@ -66,7 +88,12 @@ USING (
     CAST(o.dq_high_issues AS BIGINT) AS dq_high_issues,
     CAST(o.data_cutoff_date AS STRING) AS data_cutoff_date,
     a.headline,
-    CAST(a.generated_at AS STRING) AS insights_generated_at
+    CAST(a.generated_at AS STRING) AS insights_generated_at,
+    CAST(o.subjects_received AS BIGINT) AS subjects_received,
+    CAST(o.subjects_clean AS BIGINT) AS subjects_clean,
+    CAST(o.subjects_quarantined AS BIGINT) AS subjects_quarantined,
+    CAST(o.pct_subjects_clean AS DOUBLE) AS pct_subjects_clean,
+    CAST(o.records_quarantined AS BIGINT) AS records_quarantined
   FROM {fq}.gold_study_overview o
   LEFT JOIN {fq}.gold_study_ai_summary a USING (study_id)
 ) s
@@ -76,7 +103,7 @@ WHEN NOT MATCHED THEN INSERT *
 WHEN NOT MATCHED BY SOURCE THEN DELETE
 """)
 
-display(spark.sql(f"SELECT study_id, phase, enrolled, planned_enrollment, dq_issues, headline FROM {fq}.study_portfolio ORDER BY study_id"))
+display(spark.sql(f"SELECT study_id, phase, enrolled, subjects_clean, subjects_received, subjects_quarantined, dq_issues, headline FROM {fq}.study_portfolio ORDER BY study_id"))
 
 # COMMAND ----------
 

@@ -22,7 +22,9 @@ flowchart LR
   landing -->|"Admin approves in app"| job["Lakeflow Job: study-onboarding"]
   job --> stage["Unzip and stage (notebook)"]
   stage --> ldp["Lakeflow Declarative Pipelines: Bronze, Silver, Gold"]
-  ldp --> gold["Unity Catalog: governed Gold tables"]
+  ldp --> gold["Unity Catalog: governed Gold tables (clean subjects)"]
+  ldp --> quarantine["Quarantine tables: failed records, kept for review"]
+  quarantine --> app
   gold --> insights["AI insights: ai_query (Gen AI)"]
   insights --> portfolio["study_portfolio (Delta, Change Data Feed)"]
   portfolio --> synced["Lakebase synced table"]
@@ -36,23 +38,30 @@ flowchart LR
 Every layer is connected: the app triggers the job, the job writes governed tables, the AI and Genie read those
 same tables, and the app reads the portfolio back through Lakebase.
 
+Data quality is quarantine-first. Every record that fails a rule, and every record of its subject, moves to a
+quarantine table with the reason; nothing is dropped. KPIs, the AI briefing and Genie use clean subjects only, and the
+app shows the coverage next to every KPI ("97 of 124 subjects clean, 27 quarantined") plus a Quarantine tab where data
+managers review each failure.
+
 ## FE Bar layer map
 
 | Layer | What it does | Where to look |
 |---|---|---|
-| Lakeflow | Ingests the package and runs Bronze to Silver to Gold | [`src/pipeline/transformations/`](src/pipeline/transformations/), [`resources/study.pipeline.yml`](resources/study.pipeline.yml) |
+| Lakeflow | Ingests the package and runs Bronze to Silver to Gold, with 40 data quality rules and quarantine tables | [`src/pipeline/transformations/`](src/pipeline/transformations/), [`src/pipeline/dq_rules.py`](src/pipeline/dq_rules.py), [`resources/study.pipeline.yml`](resources/study.pipeline.yml) |
 | Unity Catalog | Schema, volumes, governed Gold tables, comments | [`resources/`](resources/), [`src/pipeline/transformations/gold.sql`](src/pipeline/transformations/gold.sql) |
 | Lakebase | Approval state, plus the portfolio served as a synced table | [`app/study-hub/server/routes/study-hub.ts`](app/study-hub/server/routes/study-hub.ts), [`00_install.py`](00_install.py) |
 | ML or Gen AI | `ai_query` writes the study headline, findings and actions | [`src/notebooks/03_study_insights.py`](src/notebooks/03_study_insights.py) |
-| Genie Agent | Natural-language questions over the Gold tables | [`scripts/create_genie_space.py`](scripts/create_genie_space.py) |
-| Databricks App | Portfolio, onboarding, approvals, study pages, Ask Genie | [`app/study-hub/`](app/study-hub/) |
-| Execution evidence | Run log, executed notebooks with outputs, query results, Genie Q&A, test output (text only) | [`evidence/RUN_LOG.md`](evidence/RUN_LOG.md) |
+| Genie Agent | Natural-language questions over the clean Gold tables | [`scripts/create_genie_space.py`](scripts/create_genie_space.py), [`scripts/genie_eval.py`](scripts/genie_eval.py) |
+| Databricks App | Portfolio, onboarding, approvals, study pages, quarantine review, Ask Genie | [`app/study-hub/`](app/study-hub/) |
+| Execution evidence | Run log, executed notebooks with outputs, query results, data quality checks, Genie Q&A and contamination check, test output (text only) | [`evidence/RUN_LOG.md`](evidence/RUN_LOG.md) |
 
 ## Decisions and trade-offs
 
 The reasoning behind each choice is in [docs/decisions.md](docs/decisions.md). The short version:
 
-- Lakeflow Declarative Pipelines for the medallion layers, so quality expectations and lineage come with the pipeline.
+- Lakeflow Declarative Pipelines for Bronze, Silver and Gold, so quality expectations and lineage come with the pipeline.
+- Quarantine tables instead of dropping or flagging bad records, at subject level, so nothing is lost and nothing
+  unverified reaches KPIs, the AI briefing or Genie.
 - A Lakeflow Job with a human approval step in front of it, instead of a file watcher.
 - Lakebase holds the workflow state, and a synced table serves the portfolio at operational latency. The SQL
   warehouse stays available for analytics and Genie.
@@ -71,7 +80,10 @@ How the build was made, which tools and prompts were used, and where human judgm
 3. Run All (about 15 to 20 minutes). The notebook deploys the platform bundle, processes two sample studies,
    creates the Lakebase project and synced table, creates the Genie space, and deploys the app.
 4. Open the app URL from the summary cell. Upload `demo_assets/RESP-303_study_package.zip` through **Onboard a Study**,
-   switch the persona to **Admin**, and approve it in **Approvals**.
+   switch the persona to **Admin**, and approve it in **Approvals**. If RESP-303 is already published, use
+   `demo_assets/DERM-404_study_package.zip`.
+5. Optional checks: run [`scripts/verify_dq.sql`](scripts/verify_dq.sql) in the SQL editor (every row should report
+   `failures = 0`), and run `scripts/genie_eval.py` to confirm no quarantined subject appears in Genie answers.
 
 Manual CLI steps are in [AGENTS.md](AGENTS.md).
 
@@ -82,13 +94,14 @@ Manual CLI steps are in [AGENTS.md](AGENTS.md).
 AGENTS.md                instructions for Genie Code and other coding agents
 databricks.yml           platform bundle
 resources/               job, pipeline, schema, volumes
-src/pipeline/            Lakeflow Declarative Pipelines (Bronze, Silver, Gold)
+src/pipeline/            Lakeflow Declarative Pipelines (Bronze, Silver, Gold) and the data quality rules registry
 src/notebooks/           unzip and stage, AI insights, publish portfolio
 src/data_gen/            synthetic study package generator
 app/study-hub/           Databricks App (AppKit, React, Express)
 data/samples/            generated sample packages used by the install notebook
 demo_assets/             generated packages for the live demo
-scripts/                 Genie space and Lakebase helpers
+scripts/                 Genie space, Lakebase and end-to-end helpers; data quality and Genie checks
+tests/                   unit tests for the data quality rules registry
 docs/                    decisions, value model, AI workflow
 ```
 

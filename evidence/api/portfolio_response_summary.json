@@ -1,10 +1,18 @@
 {
   "source": "lakebase",
   "table": "serving.study_portfolio",
-  "row_count": 3,
+  "row_count": 4,
   "study_ids": [
     "CARD-202",
+    "DERM-404",
     "ONC-101",
     "RESP-303"
+  ],
+  "coverage_columns": [
+    "subjects_received",
+    "subjects_clean",
+    "subjects_quarantined",
+    "pct_subjects_clean",
+    "records_quarantined"
   ]
 }

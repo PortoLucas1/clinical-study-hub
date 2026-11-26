@@ -5,6 +5,10 @@
 # MAGIC Reads the study's gold marts, asks a foundation model (via `ai_query`) for a concise
 # MAGIC medical-monitoring style briefing, and upserts it into `gold_study_ai_summary`, which the
 # MAGIC Study Hub app renders as "Key insights".
+# MAGIC
+# MAGIC The model only sees clean data: the Gold marts cover clean subjects, and data quality is passed as
+# MAGIC counts (coverage and issues per rule), never as quarantined values. The output is validated before
+# MAGIC it is stored; an invalid answer is replaced by a neutral message instead of raw model text.
 
 # COMMAND ----------
 
@@ -19,10 +23,11 @@ catalog = dbutils.widgets.get("catalog").strip() or "clinical_demo"
 schema = dbutils.widgets.get("schema").strip() or "study_onboarding"
 endpoint = dbutils.widgets.get("llm_endpoint").strip() or "databricks-claude-sonnet-4-5"
 submission_id = dbutils.widgets.get("submission_id").strip()
-study_id = (
-    dbutils.jobs.taskValues.get(taskKey="unzip_and_stage", key="study_id", default="", debugValue="")
-    or dbutils.widgets.get("study_id").strip()
-)
+try:
+    staged_study_id = dbutils.jobs.taskValues.get(taskKey="unzip_and_stage", key="study_id", default="", debugValue="")
+except ValueError:  # run on its own, outside the onboarding job
+    staged_study_id = ""
+study_id = staged_study_id or dbutils.widgets.get("study_id").strip()
 if not study_id:
     raise ValueError("study_id could not be resolved")
 if not re.fullmatch(r"[A-Za-z0-9\-]+", endpoint):
@@ -62,8 +67,18 @@ context = jsonable({
             FROM {fq}.gold_site_performance WHERE study_id = :study_id ORDER BY dq_issues DESC, discontinuation_rate_pct DESC""",
         12,
     ),
-    "data_quality": rows(f"SELECT * FROM {fq}.gold_dq_summary WHERE study_id = :study_id ORDER BY issue_count DESC", 20),
+    "data_quality_coverage": rows(
+        f"""SELECT subjects_received, subjects_clean, subjects_quarantined, pct_subjects_clean, records_received, records_quarantined
+            FROM {fq}.dq_study_coverage WHERE study_id = :study_id""",
+        1,
+    ),
+    "data_quality_rule_counts": rows(
+        f"""SELECT domain, rule_id, rule_description, action, issue_count, subjects_affected
+            FROM {fq}.gold_dq_summary WHERE study_id = :study_id ORDER BY issue_count DESC""",
+        20,
+    ),
 })
+coverage = (context["data_quality_coverage"] or [{}])[0]
 
 # COMMAND ----------
 
@@ -76,18 +91,63 @@ return a single JSON object (no markdown fences) with exactly these keys:
               "severity": one of ["info","watch","action"], "title": short title, "detail": one or two sentences citing numbers}},
   "recommended_actions": array of 3-4 short, concrete next steps.
 Compare treatment arms when relevant (e.g. lab shifts or SAE rates in the investigational arm vs control).
+Data quality context: every metric covers CLEAN subjects only ({coverage.get('subjects_clean')} of
+{coverage.get('subjects_received')} received). Records that failed a data quality rule, and all records of the
+affected subjects, are quarantined for data management review and are NOT in these metrics. Mention this coverage
+once in the summary, use the rule counts only to describe data quality, and never speculate about quarantined values.
 
 METRICS:
 {json.dumps(context)}
 """
+
+CATEGORIES = {"Enrollment", "Safety", "Labs", "Operations", "Data Quality"}
+SEVERITIES = {"info", "watch", "action"}
+
+
+def validate(obj) -> list[str]:
+    errors = []
+    if not isinstance(obj, dict):
+        return ["not a JSON object"]
+    for key in ("headline", "summary"):
+        if not isinstance(obj.get(key), str) or not obj[key].strip():
+            errors.append(f"{key} missing")
+    findings = obj.get("findings")
+    if not isinstance(findings, list) or not findings:
+        errors.append("findings missing")
+    else:
+        for i, f in enumerate(findings):
+            if not isinstance(f, dict):
+                errors.append(f"finding {i} not an object")
+                continue
+            if f.get("category") not in CATEGORIES:
+                errors.append(f"finding {i} category {f.get('category')!r}")
+            if f.get("severity") not in SEVERITIES:
+                errors.append(f"finding {i} severity {f.get('severity')!r}")
+            if not f.get("title") or not f.get("detail"):
+                errors.append(f"finding {i} title/detail missing")
+    actions = obj.get("recommended_actions")
+    if not isinstance(actions, list) or not all(isinstance(a, str) for a in actions):
+        errors.append("recommended_actions missing")
+    return errors
+
 
 raw = spark.sql(f"SELECT ai_query('{endpoint}', :prompt) AS r", args={"prompt": prompt}).first()["r"]
 match = re.search(r"\{.*\}", raw, re.S)
 try:
     parsed = json.loads(match.group(0) if match else raw)
 except json.JSONDecodeError:
-    parsed = {"headline": f"Insights generated for {study_id}", "summary": raw, "findings": [], "recommended_actions": []}
+    parsed = None
+errors = validate(parsed) if parsed is not None else ["response is not valid JSON"]
+validation_status = "valid" if not errors else "invalid: " + "; ".join(errors)[:500]
+if errors:
+    parsed = {
+        "headline": f"AI briefing unavailable for {study_id}: the model output failed validation",
+        "summary": "The briefing will be regenerated on the next run. KPIs and data quality results are unaffected.",
+        "findings": [],
+        "recommended_actions": [],
+    }
 
+print("validation:", validation_status)
 print(json.dumps(parsed, indent=2)[:3000])
 
 # COMMAND ----------
@@ -96,16 +156,21 @@ spark.sql(f"""
 CREATE TABLE IF NOT EXISTS {fq}.gold_study_ai_summary (
   study_id STRING, submission_id STRING, headline STRING, summary STRING,
   findings_json STRING, recommended_actions_json STRING, model STRING, generated_at TIMESTAMP
-) COMMENT 'AI-generated study briefing (headline, findings, recommended actions) per study'
+) COMMENT 'AI-generated study briefing (headline, findings, recommended actions) per study, from clean data only'
 """)
+existing = set(spark.table(f"{fq}.gold_study_ai_summary").columns)
+for col, dtype in [("subjects_clean", "BIGINT"), ("subjects_received", "BIGINT"), ("validation_status", "STRING")]:
+    if col not in existing:
+        spark.sql(f"ALTER TABLE {fq}.gold_study_ai_summary ADD COLUMNS ({col} {dtype})")
 
 out = spark.createDataFrame(
     [(
         study_id, submission_id, parsed.get("headline", ""), parsed.get("summary", ""),
         json.dumps(parsed.get("findings", [])), json.dumps(parsed.get("recommended_actions", [])),
         endpoint, datetime.now(timezone.utc),
+        coverage.get("subjects_clean"), coverage.get("subjects_received"), validation_status,
     )],
-    "study_id STRING, submission_id STRING, headline STRING, summary STRING, findings_json STRING, recommended_actions_json STRING, model STRING, generated_at TIMESTAMP",
+    "study_id STRING, submission_id STRING, headline STRING, summary STRING, findings_json STRING, recommended_actions_json STRING, model STRING, generated_at TIMESTAMP, subjects_clean BIGINT, subjects_received BIGINT, validation_status STRING",
 )
 out.createOrReplaceTempView("new_summary")
 spark.sql(f"""

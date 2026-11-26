@@ -1,0 +1,5 @@
+study_id,submission_id,validation_status,subjects_clean,subjects_received,model,headline
+CARD-202,SEED-CARD-202,valid,168,236,databricks-claude-sonnet-4-5,CRD-7 shows significantly elevated SAE rate (39.8% vs 14.1% placebo) with hypotension signal; 29% of subjects quarantined for data quality issues.
+DERM-404,SUB-20261126142546-HJ4D,valid,64,88,databricks-claude-sonnet-4-5,DERM-404 at 53% enrollment shows higher SAE rate in investigational arm (35.5% vs 18.2%) with significant data quarantine affecting 24 subjects.
+ONC-101,SEED-ONC-101,valid,97,124,databricks-claude-sonnet-4-5,"SMX-401 shows higher toxicity than Docetaxel with 100% AE rate, 30.4% SAE rate, and notable hepatobiliary signals."
+RESP-303,SUB-20261125171513-IYLA,valid,64,88,databricks-claude-sonnet-4-5,RESP-303 at 53% enrollment shows higher SAE rate in RSP-12 arm (35.5% vs 18.2% placebo) with significant data quarantine.

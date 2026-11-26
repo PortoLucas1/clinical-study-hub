@@ -68,6 +68,27 @@ declare module "@databricks/appkit-ui/react" {
           subjects: number;
         }>;
       };
+    dq_coverage: {
+        name: "dq_coverage";
+        parameters: {
+          /** STRING - use sql.string() */
+          study_id: SQLStringMarker;
+        };
+        result: Array<{
+          /** @sqlType BIGINT */
+          subjects_received: number;
+          /** @sqlType BIGINT */
+          subjects_clean: number;
+          /** @sqlType BIGINT */
+          subjects_quarantined: number;
+          /** @sqlType DOUBLE */
+          pct_subjects_clean: number;
+          /** @sqlType BIGINT */
+          records_received: number;
+          /** @sqlType BIGINT */
+          records_quarantined: number;
+        }>;
+      };
     dq_issues: {
         name: "dq_issues";
         parameters: {
@@ -76,17 +97,42 @@ declare module "@databricks/appkit-ui/react" {
         };
         result: Array<{
           /** @sqlType STRING */
+          domain: string;
+          /** @sqlType STRING */
           rule_id: string;
+          /** @sqlType STRING */
+          rule_description: string;
           /** @sqlType STRING */
           severity: string;
           /** @sqlType STRING */
-          domain: string;
+          action: string;
           /** @sqlType STRING */
           usubjid: string;
           /** @sqlType STRING */
           site_id: string;
           /** @sqlType STRING */
           detail: string;
+        }>;
+      };
+    dq_reconciliation: {
+        name: "dq_reconciliation";
+        parameters: {
+          /** STRING - use sql.string() */
+          study_id: SQLStringMarker;
+        };
+        result: Array<{
+          /** @sqlType STRING */
+          domain: string;
+          /** @sqlType BIGINT */
+          staged_rows: number;
+          /** @sqlType BIGINT */
+          bronze_rows: number;
+          /** @sqlType BIGINT */
+          clean_rows: number;
+          /** @sqlType BIGINT */
+          quarantine_rows: number;
+          /** @sqlType BOOLEAN */
+          balanced: boolean;
         }>;
       };
     dq_summary: {
@@ -104,6 +150,8 @@ declare module "@databricks/appkit-ui/react" {
           rule_description: string;
           /** @sqlType STRING */
           severity: string;
+          /** @sqlType STRING */
+          action: string;
           /** @sqlType BIGINT */
           issue_count: number;
           /** @sqlType BIGINT */
@@ -173,6 +221,39 @@ declare module "@databricks/appkit-ui/react" {
           ref_high: number;
         }>;
       };
+    quarantine_subjects: {
+        name: "quarantine_subjects";
+        parameters: {
+          /** STRING - use sql.string() */
+          study_id: SQLStringMarker;
+        };
+        result: Array<{
+          /** @sqlType STRING */
+          usubjid: string;
+          /** @sqlType STRING */
+          site_id: string;
+          /** @sqlType STRING */
+          country: string;
+          /** @sqlType BIGINT */
+          records_quarantined: number;
+          /** @sqlType STRING */
+          failed_rules: string;
+          /** @sqlType BIGINT */
+          dm_quarantined: number;
+          /** @sqlType BIGINT */
+          ae_quarantined: number;
+          /** @sqlType BIGINT */
+          vs_quarantined: number;
+          /** @sqlType BIGINT */
+          lb_quarantined: number;
+          /** @sqlType BIGINT */
+          ex_quarantined: number;
+          /** @sqlType BIGINT */
+          ds_quarantined: number;
+          /** @sqlType BIGINT */
+          sv_quarantined: number;
+        }>;
+      };
     site_performance: {
         name: "site_performance";
         parameters: {
@@ -200,6 +281,10 @@ declare module "@databricks/appkit-ui/react" {
           pct_visits_out_of_window: number;
           /** @sqlType BIGINT */
           dq_issues: number;
+          /** @sqlType BIGINT */
+          subjects_received: number;
+          /** @sqlType BIGINT */
+          subjects_quarantined: number;
         }>;
       };
     studies: {
@@ -242,6 +327,16 @@ declare module "@databricks/appkit-ui/react" {
           headline: string;
           /** @sqlType STRING */
           insights_generated_at: string;
+          /** @sqlType BIGINT */
+          subjects_received: number;
+          /** @sqlType BIGINT */
+          subjects_clean: number;
+          /** @sqlType BIGINT */
+          subjects_quarantined: number;
+          /** @sqlType DOUBLE */
+          pct_subjects_clean: number;
+          /** @sqlType BIGINT */
+          records_quarantined: number;
         }>;
       };
     study_ai_summary: {
@@ -267,6 +362,12 @@ declare module "@databricks/appkit-ui/react" {
           model: string;
           /** @sqlType STRING */
           generated_at: string;
+          /** @sqlType BIGINT */
+          subjects_clean: number;
+          /** @sqlType BIGINT */
+          subjects_received: number;
+          /** @sqlType STRING */
+          validation_status: string;
         }>;
       };
     study_overview: {
@@ -340,6 +441,37 @@ declare module "@databricks/appkit-ui/react" {
           dq_issues: number;
           /** @sqlType BIGINT */
           dq_high_issues: number;
+          /** @sqlType BIGINT */
+          subjects_received: number;
+          /** @sqlType BIGINT */
+          subjects_clean: number;
+          /** @sqlType BIGINT */
+          subjects_quarantined: number;
+          /** @sqlType DOUBLE */
+          pct_subjects_clean: number;
+          /** @sqlType BIGINT */
+          records_received: number;
+          /** @sqlType BIGINT */
+          records_quarantined: number;
+        }>;
+      };
+    submission_files: {
+        name: "submission_files";
+        parameters: {
+          /** STRING - use sql.string() */
+          submission_id: SQLStringMarker;
+        };
+        result: Array<{
+          /** @sqlType STRING */
+          domain: string;
+          /** @sqlType STRING */
+          source_file: string;
+          /** @sqlType BIGINT */
+          row_count: number;
+          /** @sqlType STRING */
+          status: string;
+          /** @sqlType STRING */
+          missing_columns: string;
         }>;
       };
     top_aes: {

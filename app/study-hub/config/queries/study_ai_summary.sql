@@ -7,6 +7,9 @@ SELECT
   findings_json,
   recommended_actions_json,
   model,
-  CAST(generated_at AS STRING) AS generated_at
+  CAST(generated_at AS STRING) AS generated_at,
+  subjects_clean,
+  subjects_received,
+  validation_status
 FROM clinical_demo.study_onboarding.gold_study_ai_summary
 WHERE study_id = :study_id

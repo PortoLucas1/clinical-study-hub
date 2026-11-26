@@ -13,7 +13,16 @@ import {
 import { useEffect, useState } from 'react';
 import { ArrowRight, FlaskConical, Plus, Sparkles } from 'lucide-react';
 import { Link } from 'react-router';
-import { BrandHeading, EmptyBlock, ErrorBlock, KpiTile, LoadingBlock, PipelineProgress, StatusBadge } from '../components/common';
+import {
+  BrandHeading,
+  EmptyBlock,
+  ErrorBlock,
+  KpiTile,
+  LoadingBlock,
+  PipelineProgress,
+  StatusBadge,
+} from '../components/common';
+import { coverageLabel } from '../lib/quality';
 import { useSubmissions } from '../lib/submissions';
 
 export function PortfolioPage() {
@@ -22,7 +31,7 @@ export function PortfolioPage() {
   useEffect(() => {
     let cancelled = false;
     fetch('/api/portfolio')
-      .then((r) => (r.ok ? r.json() : null))
+      .then((r) => (r.ok ? (r.json() as Promise<{ rows?: NonNullable<typeof sqlData> }>) : null))
       .then((body) => {
         if (!cancelled && body?.rows?.length) setLakebaseRows(body.rows);
       })
@@ -40,7 +49,8 @@ export function PortfolioPage() {
   const totalEnrolled = studies.reduce((a, s) => a + Number(s.enrolled ?? 0), 0);
   const totalPlanned = studies.reduce((a, s) => a + Number(s.planned_enrollment ?? 0), 0);
   const totalSites = studies.reduce((a, s) => a + Number(s.active_sites ?? 0), 0);
-  const totalDq = studies.reduce((a, s) => a + Number(s.dq_high_issues ?? 0), 0);
+  const totalQuarantined = studies.reduce((a, s) => a + Number(s.subjects_quarantined ?? 0), 0);
+  const totalReceived = studies.reduce((a, s) => a + Number(s.subjects_received ?? 0), 0);
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-6">
@@ -58,8 +68,10 @@ export function PortfolioPage() {
         </div>
         <div className="brand-hero p-6 md:p-8 lg:col-span-3">
           <p className="text-sm leading-relaxed md:text-base">
-            Every study package is harmonized to SDTM-like domains, checked by automated data quality rules, and summarized by AI
-            — from zip upload to study insights in minutes, with an approval step before anything is processed.
+            Every study package is harmonized to SDTM-like domains and checked by automated data quality rules. Records
+            that fail a rule are quarantined for review, never dropped, so KPIs, AI insights and Genie use clean
+            subjects only — from zip upload to study insights in minutes, with an approval step before anything is
+            processed.
           </p>
           <div className="mt-4 flex flex-wrap gap-3">
             <Button asChild variant="secondary" className="bg-white text-primary hover:bg-white/90">
@@ -90,12 +102,21 @@ export function PortfolioPage() {
             context={lakebaseRows ? 'Served from Lakebase synced table' : 'Read from the SQL warehouse'}
           />
           <KpiTile
-            label="Subjects enrolled"
+            label="Clean subjects enrolled"
             value={totalEnrolled.toLocaleString()}
             context={totalPlanned ? `${Math.round((100 * totalEnrolled) / totalPlanned)}% of ${totalPlanned.toLocaleString()} planned` : undefined}
           />
           <KpiTile label="Active sites" value={totalSites} context="Across all studies" />
-          <KpiTile label="High-severity DQ issues" value={totalDq} tone={totalDq > 0 ? 'watch' : 'good'} context="Open data quality findings" />
+          <KpiTile
+            label="Quarantined subjects"
+            value={totalQuarantined}
+            tone={totalQuarantined > 0 ? 'watch' : 'good'}
+            context={
+              totalReceived
+                ? `of ${totalReceived.toLocaleString()} received · awaiting data management review`
+                : 'Awaiting data management review'
+            }
+          />
         </div>
       )}
 
@@ -167,10 +188,19 @@ export function PortfolioPage() {
                     <div className="text-[11px] text-muted-foreground">Discontinued</div>
                   </div>
                   <div>
-                    <div className={`text-lg font-semibold tabular-nums ${Number(s.dq_high_issues) > 0 ? 'text-warning' : ''}`}>{s.dq_issues}</div>
-                    <div className="text-[11px] text-muted-foreground">DQ issues</div>
+                    <div
+                      className={`text-lg font-semibold tabular-nums ${Number(s.subjects_quarantined) > 0 ? 'text-warning' : ''}`}
+                    >
+                      {s.subjects_quarantined ?? '\u2014'}
+                    </div>
+                    <div className="text-[11px] text-muted-foreground">Quarantined</div>
                   </div>
                 </div>
+                {coverageLabel(s.subjects_clean, s.subjects_received, s.subjects_quarantined) && (
+                  <div className="text-[11px] text-muted-foreground">
+                    KPIs on {coverageLabel(s.subjects_clean, s.subjects_received, s.subjects_quarantined)}
+                  </div>
+                )}
                 {s.headline && (
                   <div className="flex gap-2 rounded-md bg-accent p-3 text-xs text-accent-foreground">
                     <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0" />

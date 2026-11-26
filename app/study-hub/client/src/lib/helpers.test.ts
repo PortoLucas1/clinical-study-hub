@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { pivot } from './pivot';
+import { coverageLabel, issueKey, ruleKey } from './quality';
 import { domainForPath } from './submissions';
 
 describe('study hub helpers', () => {
@@ -44,5 +45,15 @@ describe('study hub helpers', () => {
       { month: '2026-01', A: 2, B: 3 },
       { month: '2026-02', A: 5, B: 3 },
     ]);
+  });
+
+  test('keys data quality rules by domain because rule IDs repeat across domains', () => {
+    expect(ruleKey('ae', 'DT01')).not.toBe(ruleKey('lb', 'DT01'));
+    expect(issueKey('lb', 'LB03', 'ONC-101-101-0001')).toBe('LB.LB03|ONC-101-101-0001');
+  });
+
+  test('describes coverage as clean of received subjects', () => {
+    expect(coverageLabel(97, 124, 27)).toBe('97 of 124 subjects clean · 27 quarantined');
+    expect(coverageLabel(null, 124, 27)).toBeNull();
   });
 });

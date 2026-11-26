@@ -1,0 +1,47 @@
+rule_id,domain,severity,action,description,valid_condition
+AE01,AE,Medium,quarantine,AE end date before onset date,aeendtc IS NULL OR aestdtc IS NULL OR aeendtc >= aestdtc
+AE02,AE,Low,observe,AE onset before randomization,randdt IS NULL OR aestdtc IS NULL OR aestdtc >= randdt
+AE03,AE,Medium,quarantine,AE toxicity grade missing or outside 1-5,aetoxgr BETWEEN 1 AND 5
+AE04,AE,Medium,quarantine,AE onset date missing,aestdtc_raw IS NOT NULL
+DT01,AE,Medium,quarantine,Date could not be parsed,(aestdtc_raw IS NULL OR aestdtc IS NOT NULL) AND (aeendtc_raw IS NULL OR aeendtc IS NOT NULL)
+DT02,AE,Medium,quarantine,AE onset after the data cutoff date,aestdtc IS NULL OR data_cutoff_date IS NULL OR aestdtc <= data_cutoff_date
+KEY01,AE,High,quarantine,Subject ID missing,usubjid IS NOT NULL AND trim(usubjid) <> ''
+REF01,AE,High,quarantine,Subject not found in demographics,in_dm
+DM01,DM,High,quarantine,Age outside protocol range (18-100) or missing,age BETWEEN 18 AND 100
+DM02,DM,High,quarantine,Informed consent date missing,rficdtc_raw IS NOT NULL
+DM03,DM,Medium,quarantine,Treatment arm missing,arm IS NOT NULL AND trim(arm) <> ''
+DT01,DM,Medium,quarantine,Date could not be parsed,(rficdtc_raw IS NULL OR rficdtc IS NOT NULL) AND (randdt_raw IS NULL OR randdt IS NOT NULL)
+KEY01,DM,High,quarantine,Subject ID missing,usubjid IS NOT NULL AND trim(usubjid) <> ''
+KEY02,DM,High,quarantine,Duplicate subject in demographics,dup_count = 1
+DS01,DS,Medium,quarantine,Discontinuation without a reason,dsdecod <> 'DISCONTINUED' OR dsterm IS NOT NULL
+DT01,DS,Medium,quarantine,Date could not be parsed,(dsstdtc_raw IS NULL OR dsstdtc IS NOT NULL)
+KEY01,DS,High,quarantine,Subject ID missing,usubjid IS NOT NULL AND trim(usubjid) <> ''
+REF01,DS,High,quarantine,Subject not found in demographics,in_dm
+DT01,EX,Medium,quarantine,Date could not be parsed,(exstdtc_raw IS NULL OR exstdtc IS NOT NULL) AND (exendtc_raw IS NULL OR exendtc IS NOT NULL)
+KEY01,EX,High,quarantine,Subject ID missing,usubjid IS NOT NULL AND trim(usubjid) <> ''
+REF01,EX,High,quarantine,Subject not found in demographics,in_dm
+DT01,LB,Medium,quarantine,Date could not be parsed,(lbdtc_raw IS NULL OR lbdtc IS NOT NULL)
+DT02,LB,Medium,quarantine,Collection after the data cutoff date,lbdtc IS NULL OR data_cutoff_date IS NULL OR lbdtc <= data_cutoff_date
+KEY01,LB,High,quarantine,Subject ID missing,usubjid IS NOT NULL AND trim(usubjid) <> ''
+LB01,LB,Medium,quarantine,Lab result not numeric or missing,lbstresn IS NOT NULL
+LB02,LB,Medium,quarantine,Lab reference range missing,lbornrlo IS NOT NULL AND lbornrhi IS NOT NULL
+LB03,LB,Medium,quarantine,Lab unit differs from the study unit for this test,lbstresu <=> study_unit
+REF01,LB,High,quarantine,Subject not found in demographics,in_dm
+ST01,STUDY,High,quarantine,Study ID missing in protocol metadata,study_id IS NOT NULL AND trim(study_id) <> ''
+DT01,SV,Medium,quarantine,Date could not be parsed,(svpldtc_raw IS NULL OR svpldtc IS NOT NULL) AND (svstdtc_raw IS NULL OR svstdtc IS NOT NULL)
+DT02,SV,Medium,quarantine,Visit after the data cutoff date,svstdtc IS NULL OR data_cutoff_date IS NULL OR svstdtc <= data_cutoff_date
+KEY01,SV,High,quarantine,Subject ID missing,usubjid IS NOT NULL AND trim(usubjid) <> ''
+REF01,SV,High,quarantine,Subject not found in demographics,in_dm
+SV01,SV,Low,observe,Visit outside protocol window (+/- 7 days),days_from_planned IS NULL OR abs(days_from_planned) <= 7
+DT01,VS,Medium,quarantine,Date could not be parsed,(vsdtc_raw IS NULL OR vsdtc IS NOT NULL)
+DT02,VS,Medium,quarantine,Measurement after the data cutoff date,vsdtc IS NULL OR data_cutoff_date IS NULL OR vsdtc <= data_cutoff_date
+KEY01,VS,High,quarantine,Subject ID missing,usubjid IS NOT NULL AND trim(usubjid) <> ''
+REF01,VS,High,quarantine,Subject not found in demographics,in_dm
+VS01,VS,High,quarantine,Vital sign physiologically implausible,"vsstresn IS NULL OR (CASE vstestcd
+  WHEN 'SYSBP' THEN vsstresn BETWEEN 60 AND 250
+  WHEN 'DIABP' THEN vsstresn BETWEEN 30 AND 150
+  WHEN 'HR' THEN vsstresn BETWEEN 30 AND 220
+  WHEN 'TEMP' THEN vsstresn BETWEEN 33 AND 42
+  WHEN 'WEIGHT' THEN vsstresn BETWEEN 25 AND 300
+  ELSE TRUE END)"
+VS02,VS,Medium,quarantine,Vital sign result not numeric or missing,vsstresn IS NOT NULL

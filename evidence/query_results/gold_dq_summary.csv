@@ -1,10 +1,31 @@
-study_id,severity,issue_types,issue_count
-CARD-202,High,3,46
-CARD-202,Low,1,51
-CARD-202,Medium,2,30
-ONC-101,High,3,21
-ONC-101,Low,1,46
-ONC-101,Medium,2,7
-RESP-303,High,3,13
-RESP-303,Low,1,25
-RESP-303,Medium,2,19
+study_id,domain,rule_id,rule_description,severity,action,issue_count,subjects_affected,sites_affected
+CARD-202,AE,AE01,AE end date before onset date,Medium,quarantine,3,3,3
+CARD-202,DM,DM01,Age outside protocol range (18-100) or missing,High,quarantine,4,4,4
+CARD-202,DM,DM02,Informed consent date missing,High,quarantine,6,6,5
+CARD-202,LB,DT02,Collection after the data cutoff date,Medium,quarantine,8,1,1
+CARD-202,LB,LB01,Lab result not numeric or missing,Medium,quarantine,27,25,9
+CARD-202,SV,DT02,Visit after the data cutoff date,Medium,quarantine,1,1,1
+CARD-202,SV,SV01,Visit outside protocol window (+/- 7 days),Low,observe,51,47,12
+CARD-202,VS,DT02,Measurement after the data cutoff date,Medium,quarantine,5,1,1
+CARD-202,VS,VS01,Vital sign physiologically implausible,High,quarantine,36,35,12
+DERM-404,AE,AE01,AE end date before onset date,Medium,quarantine,1,1,1
+DERM-404,DM,DM01,Age outside protocol range (18-100) or missing,High,quarantine,2,2,1
+DERM-404,DM,DM02,Informed consent date missing,High,quarantine,2,2,2
+DERM-404,LB,LB01,Lab result not numeric or missing,Medium,quarantine,18,16,6
+DERM-404,SV,SV01,Visit outside protocol window (+/- 7 days),Low,observe,25,21,6
+DERM-404,VS,VS01,Vital sign physiologically implausible,High,quarantine,9,9,5
+ONC-101,AE,AE01,AE end date before onset date,Medium,quarantine,1,1,1
+ONC-101,DM,DM01,Age outside protocol range (18-100) or missing,High,quarantine,3,3,3
+ONC-101,DM,DM02,Informed consent date missing,High,quarantine,7,7,6
+ONC-101,LB,DT02,Collection after the data cutoff date,Medium,quarantine,16,2,2
+ONC-101,LB,LB01,Lab result not numeric or missing,Medium,quarantine,6,6,3
+ONC-101,SV,DT02,Visit after the data cutoff date,Medium,quarantine,2,2,2
+ONC-101,SV,SV01,Visit outside protocol window (+/- 7 days),Low,observe,46,39,8
+ONC-101,VS,DT02,Measurement after the data cutoff date,Medium,quarantine,10,2,2
+ONC-101,VS,VS01,Vital sign physiologically implausible,High,quarantine,11,11,7
+RESP-303,AE,AE01,AE end date before onset date,Medium,quarantine,1,1,1
+RESP-303,DM,DM01,Age outside protocol range (18-100) or missing,High,quarantine,2,2,1
+RESP-303,DM,DM02,Informed consent date missing,High,quarantine,2,2,2
+RESP-303,LB,LB01,Lab result not numeric or missing,Medium,quarantine,18,16,6
+RESP-303,SV,SV01,Visit outside protocol window (+/- 7 days),Low,observe,25,21,6
+RESP-303,VS,VS01,Vital sign physiologically implausible,High,quarantine,9,9,5

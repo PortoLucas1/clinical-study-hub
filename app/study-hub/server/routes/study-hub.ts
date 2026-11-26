@@ -51,13 +51,55 @@ const SCHEMA_SQL = [
     detail TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`,
+  `CREATE TABLE IF NOT EXISTS study_hub.dq_issue_reviews (
+    study_id TEXT NOT NULL,
+    domain TEXT NOT NULL,
+    rule_id TEXT NOT NULL,
+    usubjid TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('open', 'acknowledged', 'accepted')),
+    comment TEXT,
+    reviewed_by TEXT,
+    reviewed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (study_id, domain, rule_id, usubjid)
+  )`,
 ];
+
+const ReviewStatus = z.enum(['open', 'acknowledged', 'accepted']);
+const DqReviewBody = z.object({
+  study_id: z.string().regex(/^[A-Za-z0-9-]{2,40}$/),
+  domain: z.string().regex(/^[a-z]{2,5}$/),
+  rule_id: z.string().regex(/^[A-Z0-9_]{2,20}$/),
+  usubjid: z.string().min(1).max(100),
+  status: ReviewStatus,
+  comment: z.string().max(2000).optional(),
+});
 
 const SUBMISSION_COLUMNS = `submission_id, study_id, study_title, phase, indication, therapeutic_area, sponsor,
   file_name, file_size, zip_path, upload_path, manifest, notes, status, submitted_by, submitted_at,
   reviewed_by, reviewed_at, review_comment, run_id, run_url, run_state, run_tasks, completed_at, updated_at`;
 
 const ManifestEntry = z.object({ path: z.string(), size: z.number(), domain: z.string().nullable() });
+
+// Same required domains as the browser pre-check and the staging task (01_unzip_and_stage.py).
+export const REQUIRED_DOMAINS = ['dm', 'ae', 'lb'];
+const DOMAIN_BY_STEM: Record<string, string> = {
+  demographics: 'dm',
+  adverse_events: 'ae',
+  vital_signs: 'vs',
+  exposure: 'ex',
+  disposition: 'ds',
+  site_visits: 'sv',
+  central_lab_results: 'lb',
+  labs: 'lb',
+  study_metadata: 'meta',
+};
+
+export function missingDomains(paths: string[]): string[] {
+  const present = new Set(
+    paths.map((p) => DOMAIN_BY_STEM[(p.split('/').pop() ?? '').replace(/\.[^.]+$/, '').toLowerCase()]).filter(Boolean)
+  );
+  return REQUIRED_DOMAINS.filter((d) => !present.has(d));
+}
 
 const CreateSubmissionBody = z.object({
   study_id: z.string().regex(/^[A-Za-z0-9-]{2,40}$/, 'Study ID may only contain letters, numbers and hyphens'),
@@ -168,12 +210,56 @@ export async function setupStudyHubRoutes(appkit: StudyHubAppKit) {
         const { rows } = await appkit.lakebase.query(
           `SELECT study_id, title, phase, indication, therapeutic_area, sponsor, planned_enrollment, enrolled,
                   pct_enrollment_target, active_sites, countries, discontinuation_rate_pct, sae_subject_rate_pct,
-                  dq_issues, dq_high_issues, data_cutoff_date, headline, insights_generated_at
-             FROM ${portfolioTable} ORDER BY study_id`,
+                  dq_issues, dq_high_issues, data_cutoff_date, headline, insights_generated_at,
+                  subjects_received, subjects_clean, subjects_quarantined, pct_subjects_clean, records_quarantined
+             FROM ${portfolioTable} ORDER BY study_id`
         );
         res.json({ source: 'lakebase', table: portfolioTable, rows });
       } catch (err) {
         res.status(503).json({ source: 'unavailable', error: (err as Error).message });
+      }
+    });
+
+    app.get('/api/dq-reviews', async (req, res) => {
+      const studyId = typeof req.query.study_id === 'string' ? req.query.study_id : '';
+      if (!/^[A-Za-z0-9-]{2,40}$/.test(studyId)) {
+        res.status(400).json({ error: 'study_id is required' });
+        return;
+      }
+      try {
+        const { rows } = await appkit.lakebase.query(
+          `SELECT study_id, domain, rule_id, usubjid, status, comment, reviewed_by, reviewed_at
+             FROM study_hub.dq_issue_reviews WHERE study_id = $1`,
+          [studyId]
+        );
+        res.json(rows);
+      } catch (err) {
+        console.error('[study-hub] list dq reviews failed', err);
+        res.status(500).json({ error: 'Failed to load reviews' });
+      }
+    });
+
+    app.post('/api/dq-reviews', async (req, res) => {
+      const parsed = DqReviewBody.safeParse(req.body);
+      if (!parsed.success) {
+        res.status(400).json({ error: parsed.error.issues.map((i) => i.message).join('; ') });
+        return;
+      }
+      const b = parsed.data;
+      try {
+        const { rows } = await appkit.lakebase.query(
+          `INSERT INTO study_hub.dq_issue_reviews (study_id, domain, rule_id, usubjid, status, comment, reviewed_by, reviewed_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+           ON CONFLICT (study_id, domain, rule_id, usubjid)
+           DO UPDATE SET status = EXCLUDED.status, comment = EXCLUDED.comment,
+                         reviewed_by = EXCLUDED.reviewed_by, reviewed_at = NOW()
+           RETURNING study_id, domain, rule_id, usubjid, status, comment, reviewed_by, reviewed_at`,
+          [b.study_id, b.domain, b.rule_id, b.usubjid, b.status, b.comment ?? null, actorOf(req)]
+        );
+        res.json(rows[0]);
+      } catch (err) {
+        console.error('[study-hub] save dq review failed', err);
+        res.status(500).json({ error: 'Failed to save review' });
       }
     });
 
@@ -225,6 +311,11 @@ export async function setupStudyHubRoutes(appkit: StudyHubAppKit) {
       }
       if (!body.manifest.some((m) => m.path.endsWith('study_metadata.json'))) {
         res.status(400).json({ error: 'Package must contain study_metadata.json' });
+        return;
+      }
+      const missing = missingDomains(body.manifest.map((m) => m.path));
+      if (missing.length > 0) {
+        res.status(400).json({ error: `Package is missing required domain files: ${missing.join(', ')}` });
         return;
       }
       try {

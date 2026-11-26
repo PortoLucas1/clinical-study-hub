@@ -17,7 +17,9 @@ import {
   TableHeader,
   TableRow,
   Textarea,
+  useAnalyticsQuery,
 } from '@databricks/appkit-ui/react';
+import { sql } from '@databricks/appkit-ui/js';
 import { CheckCircle2, ExternalLink, Loader2, ShieldCheck, XCircle } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router';
@@ -32,6 +34,50 @@ import {
   type Submission,
   type SubmissionEvent,
 } from '../lib/submissions';
+
+function StagingReport({ submissionId }: { submissionId: string }) {
+  const params = useMemo(() => ({ submission_id: sql.string(submissionId) }), [submissionId]);
+  const files = useAnalyticsQuery('submission_files', params);
+  const rows = files.data ?? [];
+  const flagged = rows.filter((r) => r.status !== 'staged' || r.missing_columns);
+  if (files.loading) return <LoadingBlock rows={1} height="h-4" />;
+  if (files.error) return <ErrorBlock title="Staging report unavailable" message={files.error} />;
+  if (rows.length === 0) return null;
+  return (
+    <div>
+      <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Staging report</div>
+      <p className="mb-2 text-xs text-muted-foreground">
+        {rows.length - flagged.length} files staged cleanly
+        {flagged.length > 0
+          ? ` · ${flagged.length} need attention (unrecognized files are kept for review, never discarded)`
+          : ''}
+        .
+      </p>
+      {flagged.length > 0 && (
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>File</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Missing columns</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {flagged.map((r) => (
+                <TableRow key={r.source_file}>
+                  <TableCell className="font-mono text-xs">{r.source_file.split('/').slice(-2).join('/')}</TableCell>
+                  <TableCell className="text-xs">{r.status}</TableCell>
+                  <TableCell className="text-xs">{r.missing_columns ?? '\u2014'}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function ReviewPanel({ submission, onDone }: { submission: Submission; onDone: () => Promise<void> }) {
   const { apiFetch } = usePersona();
@@ -170,7 +216,8 @@ function ReviewPanel({ submission, onDone }: { submission: Submission; onDone: (
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">
-              Approving starts the onboarding job: unzip &amp; stage, then the Bronze → Silver → Gold pipeline, then AI insights.
+              Approving starts the onboarding job: unzip &amp; stage, then the Lakeflow Declarative Pipeline (records
+              that fail a data quality rule go to quarantine, never dropped), then AI insights on clean subjects.
             </p>
           </div>
         ) : (
@@ -198,6 +245,10 @@ function ReviewPanel({ submission, onDone }: { submission: Submission; onDone: (
             {submission.review_comment && <p className="text-sm">“{submission.review_comment}”</p>}
           </div>
         )}
+
+        {(submission.status === 'PROCESSING' ||
+          submission.status === 'PUBLISHED' ||
+          submission.status === 'FAILED') && <StagingReport submissionId={submission.submission_id} />}
 
         <div>
           <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Audit trail</div>

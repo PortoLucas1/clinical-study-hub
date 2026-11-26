@@ -15,3 +15,9 @@ resources:
             include: ../src/pipeline/transformations/**
       configuration:
         raw_path: /Volumes/${var.catalog}/${var.schema}/raw
+        dq.catalog: ${var.catalog}
+        dq.schema: ${var.schema}
+      event_log:
+        catalog: ${var.catalog}
+        schema: ${var.schema}
+        name: study_pipeline_event_log
